@@ -20,7 +20,7 @@ Read the README
 --== PYTHON GRAPHSERVER ==--
 
 Prerequisites:
-Python 2.5
+Python 2.5 (2.6+ required by graphserver.ext.* modules)
 
 Build:
 There is no build step!
