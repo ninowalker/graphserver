@@ -1,4 +1,3 @@
-
 try:
     from graphserver.gsdll import lgs, libc, cproperty, ccast, CShadow, instantiate, PayloadMethodTypes
 except ImportError:
@@ -26,12 +25,6 @@ These classes map C structs to Python Ctypes Structures.
 
 """
 
-class Collapsable:
-    def collapse(self, state):
-        return self._ccollapse(self.soul, state.soul)
-    
-    def collapse_back(self,state):
-        return self._ccollapse_back(self.soul, state.soul)
 
 class Walkable:
     """ Implements the walkable interface. """
@@ -80,6 +73,11 @@ class Graph(CShadow):
         
         return self._cadd_vertex(self.soul, label)
         
+    def remove_vertex(self, label, free_vertex_payload, free_edge_payload):
+        #void gRemoveVertex( Graph* this, char *label, int free_vertex_payload, int free_edge_payloads );
+        
+        return self._cremove_vertex(self.soul, label, free_vertex_payload, free_edge_payload)
+        
     def get_vertex(self, label):
         #Vertex* gGetVertex( Graph* this, char *label );
         self.check_destroyed()
@@ -90,8 +88,20 @@ class Graph(CShadow):
         #Edge* gAddEdge( Graph* this, char *from, char *to, EdgePayload *payload );
         self.check_destroyed()
         
-        return self._cadd_edge( self.soul, fromv, tov, payload.soul )
-    
+        e = self._cadd_edge( self.soul, fromv, tov, payload.soul )
+        
+        if e != None: return e
+
+        if not self.get_vertex(fromv):
+            raise VertexNotFoundError(fromv)
+        raise VertexNotFoundError(tov)
+        
+    def set_vertex_enabled( self, vertex_label, enabled ):
+        #void gSetVertexEnabled( Graph *this, char *label, int enabled );
+        self.check_destroyed()
+        
+        lgs.gSetVertexEnabled( self.soul, vertex_label, enabled )
+        
     @property
     def vertices(self):
         self.check_destroyed()
@@ -143,7 +153,7 @@ class Graph(CShadow):
         if not fromv:
             fromv = "*bogus^*^vertex*"
             
-        if walk_optoins is None:
+        if walk_options is None:
             walk_options = WalkOptions()
             ret = self._cshortest_path_tree_retro( self.soul, fromv, tov, finalstate.soul, walk_options.soul, c_long(mintime) )
             walk_options.destroy()
@@ -195,9 +205,48 @@ class ShortestPathTree(Graph):
         
         return (pv, pe)
         
+    def set_thicknesses(self, root_label):
+        lgs.gSetThicknesses( c_void_p(self.soul), c_char_p(root_label) )
+
     def destroy(self):
         #destroy the vertex State instances, but not the edge EdgePayload instances, as they're owned by the parent graph
         super(ShortestPathTree, self).destroy(1, 0)
+
+class EdgePayload(CShadow, Walkable):
+    def __init__(self):
+        if self.__class__ == EdgePayload:
+            raise "EdgePayload is an abstract type."
+    
+    def destroy(self):
+        self.check_destroyed()
+        
+        self._cdel(self.soul)
+        self.soul = None
+        
+    def __str__(self):
+        return self.to_xml()
+
+    def to_xml(self):
+        self.check_destroyed()
+        return "<abstractedgepayload type='%s'/>" % self.type
+    
+    type = cproperty(lgs.epGetType, c_int)
+    
+    @classmethod
+    def from_pointer(cls, ptr):
+        """ Overrides the default behavior to return the appropriate subtype."""
+        if ptr is None:
+            return None
+        
+        payloadtype = EdgePayload._subtypes[EdgePayload._cget_type(ptr)]
+        if payloadtype is GenericPyPayload:
+            p = lgs.cpSoul(ptr)
+            # this is required to prevent garbage collection of the object
+            Py_INCREF(p)
+            return p
+        ret = instantiate(payloadtype)
+        ret.soul = ptr
+        return ret
 
 class State(CShadow):
     
@@ -241,13 +290,11 @@ class State(CShadow):
         self.check_destroyed()  
         
         ret = "<state time='%d' weight='%s' dist_walked='%s' " \
-              "num_transfers='%s' prev_edge_type='%s' prev_edge_name='%s' trip_id='%s'>" % \
+              "num_transfers='%s' trip_id='%s'>" % \
                (self.time,
                self.weight,
                self.dist_walked,
               self.num_transfers,
-               self.prev_edge_type,
-               self.prev_edge_name,
                self.trip_id)
         for i in range(self.num_agencies):
             if self.service_period(i) is not None:
@@ -258,8 +305,7 @@ class State(CShadow):
     weight         = cproperty(lgs.stateGetWeight, c_long, setter=lgs.stateSetWeight)
     dist_walked    = cproperty(lgs.stateGetDistWalked, c_double, setter=lgs.stateSetDistWalked)
     num_transfers  = cproperty(lgs.stateGetNumTransfers, c_int, setter=lgs.stateSetNumTransfers)
-    prev_edge_type = cproperty(lgs.stateGetPrevEdgeType, c_int, setter=lgs.stateSetPrevEdgeType) # should not use: setter=lgs.stateSetPrevEdgeType)
-    prev_edge_name = cproperty(lgs.stateGetPrevEdgeName, c_char_p, setter=lgs.stateSetPrevEdgeName)
+    prev_edge      = cproperty(lgs.stateGetPrevEdge, c_void_p, EdgePayload, setter=lgs.stateSetPrevEdge )
     num_agencies     = cproperty(lgs.stateGetNumAgencies, c_int)
     trip_id          = cproperty(lgs.stateGetTripId, c_char_p)
     
@@ -274,9 +320,22 @@ class WalkOptions(CShadow):
         self._cdel(self.soul)
         self.soul = None
         
+    @classmethod
+    def from_pointer(cls, ptr):
+        """ Overrides the default behavior to return the appropriate subtype."""
+        if ptr is None:
+            return None
+        ret = instantiate(cls)
+        ret.soul = ptr
+        return ret
+ 
     transfer_penalty = cproperty(lgs.woGetTransferPenalty, c_int, setter=lgs.woSetTransferPenalty)
+    turn_penalty = cproperty(lgs.woGetTurnPenalty, c_int, setter=lgs.woSetTurnPenalty)
     walking_speed = cproperty(lgs.woGetWalkingSpeed, c_float, setter=lgs.woSetWalkingSpeed)
     walking_reluctance = cproperty(lgs.woGetWalkingReluctance, c_float, setter=lgs.woSetWalkingReluctance)
+    uphill_slowness = cproperty(lgs.woGetUphillSlowness, c_float, setter=lgs.woSetUphillSlowness)
+    downhill_fastness = cproperty(lgs.woGetDownhillFastness, c_float, setter=lgs.woSetDownhillFastness)
+    hill_reluctance = cproperty(lgs.woGetHillReluctance, c_float, setter=lgs.woSetHillReluctance)
     max_walk = cproperty(lgs.woGetMaxWalk, c_int, setter=lgs.woSetMaxWalk)
     walking_overage = cproperty(lgs.woGetWalkingOverage, c_float, setter=lgs.woSetWalkingOverage)
 
@@ -328,7 +387,6 @@ class Vertex(CShadow):
             if index == -1:
                 return e
             else: 
-                print "return none1"
                 return None
         i = 0
         while node:
@@ -348,6 +406,9 @@ class Vertex(CShadow):
     def get_incoming_edge(self,i):
         self.check_destroyed()
         return self._edges(self._cincoming_edges, i)
+        
+    def __hash__(self):
+        return int(self.soul)
 
 class Edge(CShadow, Walkable):
     def __init__(self, from_v, to_v, payload):
@@ -374,6 +435,9 @@ class Edge(CShadow, Walkable):
         
     def walk(self, state, walk_options):
         return self._cwalk(self.soul, state.soul, walk_options.soul)
+        
+    thickness = cproperty(lgs.eGetThickness, c_long, setter=lgs.eSetThickness)
+    enabled = cproperty(lgs.eGetEnabled, c_int, setter=lgs.eSetEnabled)
 
 
 class ListNode(CShadow):
@@ -386,41 +450,7 @@ class ListNode(CShadow):
         return self._cnext(self.soul)
 
             
-class EdgePayload(CShadow, Walkable):
-    def __init__(self):
-        if self.__class__ == EdgePayload:
-            raise "EdgePayload is an abstract type."
-    
-    def destroy(self):
-        self.check_destroyed()
-        
-        self._cdel(self.soul)
-        self.soul = None
-        
-    def __str__(self):
-        return self.to_xml()
 
-    def to_xml(self):
-        self.check_destroyed()
-        return "<abstractedgepayload type='%s'/>" % self.type
-    
-    type = cproperty(lgs.epGetType, c_int)
-    
-    @classmethod
-    def from_pointer(cls, ptr):
-        """ Overrides the default behavior to return the appropriate subtype."""
-        if ptr is None:
-            return None
-        
-        payloadtype = EdgePayload._subtypes[EdgePayload._cget_type(ptr)]
-        if payloadtype is GenericPyPayload:
-            p = lgs.cpSoul(ptr)
-            # this is required to prevent garbage collection of the object
-            Py_INCREF(p)
-            return p
-        ret = instantiate(payloadtype)
-        ret.soul = ptr
-        return ret
 
 
 def failsafe(return_arg_num_on_failure):
@@ -460,50 +490,30 @@ class GenericPyPayload(EdgePayload):
     """ These methods are the public interface, BUT should not be overridden by subclasses 
         - subclasses should override the *_impl methods instead.""" 
     @failsafe(1)
-    def walk(self, state):
+    def walk(self, state, walkoptions):
         s = state.clone()
         s.prev_edge_name = self.name
-        return self.walk_impl(s)
+        return self.walk_impl(s, walkoptions)
     
     @failsafe(1)
-    def walk_back(self, state):
+    def walk_back(self, state, walkoptions):
         s = state.clone()
         s.prev_edge_name = self.name
-        return self.walk_back_impl(s)
-
-    @failsafe(0)
-    def collapse(self, state):
-        return self.collapse_impl(state)
-
-    @failsafe(0)
-    def collapse_back(self, state):
-        return self.collapse_back_impl(state)
+        return self.walk_back_impl(s, walkoptions)
      
     """ These methods should be overridden by subclasses as deemed fit. """
-    def walk_impl(self, state):
+    def walk_impl(self, state, walkoptions):
         return state
 
-    def walk_back_impl(self, state):
+    def walk_back_impl(self, state, walkoptions):
         return state
-
-    def collapse_impl(self, state):
-        return self
-
-    def collapse_back_impl(self, state):
-        return self
 
     """ These methods provide the interface from the C world to py method implementation. """
-    def _cwalk(self, stateptr):
-        return self.walk(State.from_pointer(stateptr)).soul
+    def _cwalk(self, stateptr, walkoptionsptr):
+        return self.walk(State.from_pointer(stateptr), WalkOptions.from_pointer(walkoptionsptr)).soul
 
-    def _cwalk_back(self, stateptr):
-        return self.walk_back(State.from_pointer(stateptr)).soul
-
-    def _ccollapse(self, stateptr):
-        return self.collapse(State.from_pointer(stateptr)).soul
-
-    def _ccollapse_back(self, stateptr):
-        return self.collapse_back(State.from_pointer(stateptr)).soul
+    def _cwalk_back(self, stateptr, walkoptionsptr):
+        return self.walk_back(State.from_pointer(stateptr), WalkOptions.from_pointer(walkoptionsptr)).soul
 
     def _cfree(self):
         #print "Freeing %s..." % self
@@ -515,9 +525,7 @@ class GenericPyPayload(EdgePayload):
         
     _cmethodptrs = [PayloadMethodTypes.destroy(_cfree),
                     PayloadMethodTypes.walk(_cwalk),
-                    PayloadMethodTypes.walk_back(_cwalk_back),
-                    PayloadMethodTypes.collapse(_ccollapse),
-                    PayloadMethodTypes.collapse_back(_ccollapse_back)]
+                    PayloadMethodTypes.walk_back(_cwalk_back)]
 
     _cmethods = lgs.defineCustomPayloadType(*_cmethodptrs)
 
@@ -528,10 +536,10 @@ class NoOpPyPayload(GenericPyPayload):
         super(NoOpPyPayload,self).__init__()
     
     """ Dummy class."""
-    def walk_impl(self, state):
+    def walk_impl(self, state, walkopts):
         print "%s walking..." % self
         
-    def walk_back_impl(self, state):
+    def walk_back_impl(self, state, walkopts):
         print "%s walking back..." % self
         
         
@@ -616,6 +624,13 @@ class ServiceCalendar(CShadow):
        
     def __init__(self):
         self.soul = lgs.scNew()
+        
+    def destroy(self):
+        self.check_destroyed()
+        
+        self._cdel(self.soul)
+        self.soul = None
+
     
     def get_service_id_int( self, service_id ):
         if type(service_id)!=type("string"):
@@ -658,18 +673,27 @@ class ServiceCalendar(CShadow):
         
     def __getstate__(self):
         ret = []
+        max_sid = -1
         curs = self.head
         while curs:
             start, end, sids = curs.__getstate__()
+            for sid in sids:
+                max_sid = max(max_sid, sid)
             sids = [self.get_service_id_string(sid) for sid in sids]
+
             ret.append( (start,end,sids) )
             curs = curs.next
-        return ret
+        sids_list = [self.get_service_id_string(sid) for sid in range(max_sid+1)]
+        return (sids_list, ret)
         
     def __setstate__(self, state):
         self.__init__()
-        for sp_state in state:
-            self.add_period( *sp_state )
+        sids_list, periods = state
+        for sid in sids_list:
+            self.get_service_id_int(sid)
+            
+        for p in periods:
+            self.add_period( *p )
             
     def __repr__(self):
         return "<ServiceCalendar periods=%s>"%repr(list(self.periods))
@@ -680,7 +704,8 @@ class ServiceCalendar(CShadow):
         for period in self.periods:
             begin_time = TimeHelpers.unix_to_localtime( period.begin_time, timezone_name )
             end_time = TimeHelpers.unix_to_localtime( period.end_time, timezone_name )
-            periodstrs.append( "sids:%s active from %d (%s) to %d (%s)"%(period.service_ids, period.begin_time, begin_time, period.end_time, end_time) )
+            service_ids = dict([(id,self.get_service_id_string(id)) for id in period.service_ids])
+            periodstrs.append( "sids:%s active from %d (%s) to %d (%s)"%(service_ids, period.begin_time, begin_time, period.end_time, end_time) )
         
         return "\n".join( periodstrs )
     
@@ -712,6 +737,12 @@ class Timezone(CShadow):
     def __init__(self):
         self.soul = lgs.tzNew()
         
+    def destroy(self):
+        self.check_destroyed()
+        
+        self._cdel(self.soul)
+        self.soul = None
+
     def add_period(self, timezone_period):
         lgs.tzAddPeriod( self.soul, timezone_period.soul)
         
@@ -796,6 +827,42 @@ class Link(EdgePayload):
 class Street(EdgePayload):
     length = cproperty(lgs.streetGetLength, c_double)
     name   = cproperty(lgs.streetGetName, c_char_p)
+    rise = cproperty(lgs.streetGetRise, c_float)
+    fall = cproperty(lgs.streetGetFall, c_float)
+    slog = cproperty(lgs.streetGetSlog, c_float, setter=lgs.streetSetSlog)
+    way = cproperty(lgs.streetGetWay, c_long, setter=lgs.streetSetWay)
+    
+    def __init__(self,name,length,rise=0,fall=0):
+        self.soul = self._cnew(name, length, rise, fall)
+            
+    def to_xml(self):
+        self.check_destroyed()
+        
+        return "<Street name='%s' length='%f' rise='%f' fall='%f' way='%ld'/>" % (self.name, self.length, self.rise, self.fall, self.way)
+        
+    def __getstate__(self):
+        return (self.name, self.length, self.rise, self.fall, self.slog, self.way)
+        
+    def __setstate__(self, state):
+        name, length, rise, fall, slog, way = state
+        self.__init__(name, length, rise, fall)
+        self.slog = slog
+        self.way = way
+        
+    def __repr__(self):
+        return "<Street name='%s' length=%f rise=%f fall=%f way=%ld>"%(self.name, self.length, self.rise, self.fall, self.way)
+        
+    @classmethod
+    def reconstitute(self, state, resolver):
+        name, length, rise, fall, slog, way = state
+        ret = Street( name, length, rise, fall )
+        ret.slog = slog
+        ret.way = way
+        return ret
+
+class Egress(EdgePayload):
+    length = cproperty(lgs.egressGetLength, c_double)
+    name   = cproperty(lgs.egressGetName, c_char_p)
     
     def __init__(self,name,length):
         self.soul = self._cnew(name, length)
@@ -803,7 +870,7 @@ class Street(EdgePayload):
     def to_xml(self):
         self.check_destroyed()
         
-        return "<Street name='%s' length='%f' />" % (self.name, self.length)
+        return "<Egress name='%s' length='%f' />" % (self.name, self.length)
         
     def __getstate__(self):
         return (self.name, self.length)
@@ -812,11 +879,12 @@ class Street(EdgePayload):
         self.__init__(*state)
         
     def __repr__(self):
-        return "<Street name='%s' length=%f>"%(self.name, self.length)
+        return "<Egress name='%s' length=%f>"%(self.name, self.length)
         
     @classmethod
     def reconstitute(self, state, resolver):
-        return Street( *state )
+        return Egress( *state )
+
 
 class Wait(EdgePayload):
     end = cproperty(lgs.waitGetEnd, c_long)
@@ -833,48 +901,26 @@ class Wait(EdgePayload):
     def __getstate__(self):
         return (self.end, self.timezone.soul)
 
-class TripHop(EdgePayload):
+class ElapseTime(EdgePayload):
+    seconds = cproperty(lgs.elapseTimeGetSeconds, c_long)
     
-    depart = cproperty( lgs.triphopDepart, c_int )
-    arrive = cproperty( lgs.triphopArrive, c_int )
-    transit = cproperty( lgs.triphopTransit, c_int )
-    trip_id = cproperty( lgs.triphopTripId, c_char_p )
-    calendar = cproperty( lgs.triphopCalendar, c_void_p, ServiceCalendar )
-    timezone = cproperty( lgs.triphopTimezone, c_void_p, Timezone )
-    agency = cproperty( lgs.triphopAuthority, c_int )
-    int_service_id = cproperty( lgs.triphopServiceId, c_int )
-
-    SEC_IN_HOUR = 3600
-    SEC_IN_MINUTE = 60
-    
-    def __init__(self, depart, arrive, trip_id, calendar, timezone, agency, service_id ):
-        if type(service_id)!=type('string'):
-            raise TypeError("service_id is supposed to be a string")
-            
-        if arrive < depart:
-            raise Exception("The triphop cannot arrive earlier than it departs. depart:%d arrive:%d"%(depart, arrive))
-            
-        int_sid = calendar.get_service_id_int( service_id )
-        self.soul = lgs.triphopNew(depart, arrive, trip_id.encode("ascii"), calendar.soul, timezone.soul, c_int(agency), ServiceIdType(int_sid))
+    def __init__(self, seconds):
+        self.soul = self._cnew( seconds )
+        
+    def to_xml(self):
+        self.check_destroyed()
+        
+        return "<ElapseTime seconds='%ld' />"%(self.seconds)
+        
+    def __getstate__(self):
+        return self.seconds
     
     @classmethod
-    def _daysecs_to_str(cls,daysecs):
-        return "%02d:%02d:%02d"%(int(daysecs/cls.SEC_IN_HOUR), int(daysecs%cls.SEC_IN_HOUR/cls.SEC_IN_MINUTE), int(daysecs%cls.SEC_IN_MINUTE))
-        
-    @property
-    def service_id(self):
-        return self.calendar.get_service_id_string( self.int_service_id )
+    def reconstitute(cls, state, resolver):
+        return cls(state)
 
-    def to_xml(self):
-        print self.service_id
-        return "<TripHop depart='%s' arrive='%s' transit='%s' trip_id='%s' service_id='%s' agency='%d'/>" % \
-                        (self._daysecs_to_str(self.depart),
-                        self._daysecs_to_str(self.arrive),
-                        self.transit, self.trip_id,self.service_id,self.agency)
-    
-    def __getstate__(self):
-        return (self.depart, self.arrive, self.trip_id, self.calendar.soul, self.timezone.soul, self.agency, self.calendar.get_service_id_string(self.int_service_id))
-    
+
+
 class Headway(EdgePayload):
     
     begin_time = cproperty( lgs.headwayBeginTime, c_int )
@@ -911,84 +957,6 @@ class Headway(EdgePayload):
     
     def __getstate__(self):
         return (self.begin_time, self.end_time, self.wait_period, self.transit, self.trip_id, self.calendar.soul, self.timezone.soul, self.agency, self.calendar.get_service_id_string(self.int_service_id))
-    
-class TripHopSchedule(EdgePayload):
-    
-    calendar = cproperty( lgs.thsGetCalendar, c_void_p, ServiceCalendar )
-    timezone = cproperty( lgs.thsGetTimezone, c_void_p, Timezone )
-    
-    def __init__(self, hops, service_id, calendar, timezone, agency):
-        #TripHopSchedule* thsNew( int *departs, int *arrives, char **trip_ids, int n, ServiceId service_id, ServicePeriod* calendar, int timezone_offset );
-        
-        n = len(hops)
-        departs = (c_int * n)()
-        arrives = (c_int * n)()
-        trip_ids = (c_char_p * n)()
-        for i in range(n):
-            departs[i] = hops[i][0]
-            arrives[i] = hops[i][1]
-            trip_ids[i] = c_char_p(hops[i][2])
-        
-        self.soul = lgs.thsNew(departs, arrives, trip_ids, n, calendar.get_service_id_int( service_id ), calendar.soul, timezone.soul, c_int(agency) )
-    
-    n = cproperty(lgs.thsGetN, c_int)
-    service_id_int = cproperty(lgs.thsGetServiceId, c_int)
-    
-    @property
-    def service_id(self):
-        return self.calendar.get_service_id_string( self.service_id_int )
-        
-    def triphop(self, i):
-        self.check_destroyed()
-        
-        return self._chop(self.soul, i)
-    
-    @property
-    def triphops(self):
-        self.check_destroyed()
-        
-        hops = []
-        for i in range(self.n):
-            hops.append( self.triphop( i ) )
-        return hops
-    
-    def to_xml(self):
-        self.check_destroyed()
-        
-        ret = "<TripHopSchedule service_id='%s'>" % self.service_id
-        for triphop in self.triphops:
-          ret += triphop.to_xml()
-
-        ret += "</TripHopSchedule>"
-        return ret
-        
-    def collapse(self, state):
-        self.check_destroyed()
-        
-        func = lgs.thsCollapse
-        func.restype = c_void_p
-        func.argtypes = [c_void_p, c_void_p]
-        
-        triphopsoul = func(self.soul, state.soul)
-        
-        return TripHop.from_pointer( triphopsoul )
-        
-    def collapse_back(self, state):
-        self.check_destroyed()
-        
-        func = lgs.thsCollapseBack
-        func.restype = c_void_p
-        func.argtypes = [c_void_p, c_void_p]
-        
-        triphopsoul = func(self.soul, state.soul)
-        
-        return TripHop.from_pointer( triphopsoul )
-        
-    def get_next_hop(self, time):
-        return TripHop.from_pointer( self._cget_next_hop(self.soul, time) )
-        
-    def get_last_hop(self, time):
-        return TripHop.from_pointer( self._cget_last_hop(self.soul, time) )
         
 class TripBoard(EdgePayload):
     calendar = cproperty( lgs.tbGetCalendar, c_void_p, ServiceCalendar )
@@ -1002,7 +970,11 @@ class TripBoard(EdgePayload):
         service_id = service_id if type(service_id)==int else calendar.get_service_id_int(service_id)
         
         self.soul = self._cnew(service_id, calendar.soul, timezone.soul, agency)
-        
+    
+    @property
+    def service_id(self):
+        return self.calendar.get_service_id_string( self.int_service_id )
+    
     def add_boarding(self, trip_id, depart):
         self._cadd_boarding( self.soul, trip_id, depart )
         
@@ -1033,7 +1005,7 @@ class TripBoard(EdgePayload):
         return "<TripBoard />"
         
     def __repr__(self):
-        return "<TripBoard int_sid=%d agency=%d calendar=%s timezone=%s boardings=%s>"%(self.int_service_id, self.agency, self.calendar.soul,self.timezone.soul,[self.get_boarding(i) for i in range(self.num_boardings)])
+        return "<TripBoard int_sid=%d sid=%s agency=%d calendar=%s timezone=%s boardings=%s>"%(self.int_service_id, self.calendar.get_service_id_string(self.int_service_id), self.agency, self.calendar.soul,self.timezone.soul,[self.get_boarding(i) for i in range(self.num_boardings)])
         
     def __getstate__(self):
         state = {}
@@ -1113,7 +1085,11 @@ class HeadwayBoard(EdgePayload):
                                                                                                                                           self.start_time,
                                                                                                                                           self.end_time,
                                                                                                                                           self.headway_secs)
-                                                                                                                                          
+
+    @property
+    def service_id(self):
+        return self.calendar.get_service_id_string( self.int_service_id )
+                                                                                                                                      
     def __getstate__(self):
         state = {}
         state['calendar'] = self.calendar.soul
@@ -1144,6 +1120,62 @@ class HeadwayBoard(EdgePayload):
         ret = HeadwayBoard(int_sid, calendar, timezone, agency, trip_id, start_time, end_time, headway_secs)
             
         return ret
+        
+class HeadwayAlight(EdgePayload):
+    calendar = cproperty( lgs.haGetCalendar, c_void_p, ServiceCalendar )
+    timezone = cproperty( lgs.haGetTimezone, c_void_p, Timezone )
+    agency = cproperty( lgs.haGetAgency, c_int )
+    int_service_id = cproperty( lgs.haGetServiceId, c_int )
+    trip_id = cproperty( lgs.haGetTripId, c_char_p )
+    start_time = cproperty( lgs.haGetStartTime, c_int )
+    end_time = cproperty( lgs.haGetEndTime, c_int )
+    headway_secs = cproperty( lgs.haGetHeadwaySecs, c_int )
+    
+    def __init__(self, service_id, calendar, timezone, agency, trip_id, start_time, end_time, headway_secs):
+        service_id = service_id if type(service_id)==int else calendar.get_service_id_int(service_id)
+        
+        self.soul = self._cnew(service_id, calendar.soul, timezone.soul, agency, trip_id, start_time, end_time, headway_secs)
+        
+    def __repr__(self):
+        return "<HeadwayAlight calendar=%d timezone=%d agency=%d service_id=%d trip_id=\"%s\" start_time=%d end_time=%d headway_secs=%d>"%(self.calendar.soul,
+                                                                                                                                          self.timezone.soul,
+                                                                                                                                          self.agency,
+                                                                                                                                          self.int_service_id,
+                                                                                                                                          self.trip_id,
+                                                                                                                                          self.start_time,
+                                                                                                                                          self.end_time,
+                                                                                                                                          self.headway_secs)
+                                                                                                                                          
+    def __getstate__(self):
+        state = {}
+        state['calendar'] = self.calendar.soul
+        state['timezone'] = self.timezone.soul
+        state['agency'] = self.agency
+        state['int_sid'] = self.int_service_id
+        state['trip_id'] = self.trip_id
+        state['start_time'] = self.start_time
+        state['end_time'] = self.end_time
+        state['headway_secs'] = self.headway_secs
+        return state
+        
+    def __resources__(self):
+        return ((str(self.calendar.soul), self.calendar),
+                (str(self.timezone.soul), self.timezone))
+    
+    @classmethod
+    def reconstitute(cls, state, resolver):
+        calendar = resolver.resolve( state['calendar'] )
+        timezone = resolver.resolve( state['timezone'] )
+        int_sid = state['int_sid']
+        agency = state['agency']
+        trip_id = state['trip_id']
+        start_time = state['start_time']
+        end_time = state['end_time']
+        headway_secs = state['headway_secs']
+        
+        ret = HeadwayAlight(int_sid, calendar, timezone, agency, trip_id, start_time, end_time, headway_secs)
+            
+        return ret
     
 class Crossing(EdgePayload):
     crossing_time = cproperty( lgs.crGetCrossingTime, c_int )
@@ -1162,22 +1194,109 @@ class Crossing(EdgePayload):
         return Crossing(state)
         
 class Alight(EdgePayload):
-    def __init__(self):
-        self.soul = self._cnew()
+    calendar = cproperty( lgs.alGetCalendar, c_void_p, ServiceCalendar )
+    timezone = cproperty( lgs.alGetTimezone, c_void_p, Timezone )
+    agency = cproperty( lgs.alGetAgency, c_int )
+    int_service_id = cproperty( lgs.alGetServiceId, c_int )
+    num_alightings = cproperty( lgs.alGetNumAlightings, c_int )
+    overage = cproperty( lgs.tbGetOverage, c_int )
+    
+    def __init__(self, service_id, calendar, timezone, agency):
+        service_id = service_id if type(service_id)==int else calendar.get_service_id_int(service_id)
+        
+        self.soul = self._cnew(service_id, calendar.soul, timezone.soul, agency)
+        
+    def add_alighting(self, trip_id, arrival):
+        lgs.alAddAlighting( self.soul, trip_id, arrival )
+        
+    def get_alighting(self, i):
+        trip_id = lgs.alGetAlightingTripId(self.soul, c_int(i))
+        arrival = lgs.alGetAlightingArrival(self.soul, c_int(i))
+        
+        if trip_id is None:
+            raise IndexError("Index %d out of bounds"%i)
+        
+        return (trip_id, arrival)
+        
+    def search_alightings_list(self, time):
+        return lgs.alSearchAlightingsList( self.soul, c_int(time) )
+        
+    def get_last_alighting_index(self, time):
+        return lgs.alGetLastAlightingIndex( self.soul, c_int(time) )
+        
+    def get_last_alighting(self, time):
+        i = self.get_last_alighting_index(time)
+        
+        if i == -1:
+            return None
+        else:
+            return self.get_alighting( i )
         
     def to_xml(self):
         return "<Alight/>"
         
-    def __getstate__(self):
-        return tuple()
+    def __repr__(self):
+        return "<Alight int_sid=%d agency=%d calendar=%s timezone=%s alightings=%s>"%(self.int_service_id, self.agency, self.calendar.soul,self.timezone.soul,[self.get_alighting(i) for i in range(self.num_alightings)])
         
+    def __getstate__(self):
+        state = {}
+        state['calendar'] = self.calendar.soul
+        state['timezone'] = self.timezone.soul
+        state['agency'] = self.agency
+        state['int_sid'] = self.int_service_id
+        alightings = []
+        for i in range(self.num_alightings):
+            alightings.append( self.get_alighting( i ) )
+        state['alightings'] = alightings
+        return state
+        
+    def __resources__(self):
+        return ((str(self.calendar.soul), self.calendar),
+                (str(self.timezone.soul), self.timezone))
+    
     @classmethod
     def reconstitute(cls, state, resolver):
-        return Alight()
+        calendar = resolver.resolve( state['calendar'] )
+        timezone = resolver.resolve( state['timezone'] )
+        int_sid = state['int_sid']
+        agency = state['agency']
+        
+        ret = Alight(int_sid, calendar, timezone, agency)
+        
+        for trip_id, arrival in state['alightings']:
+            ret.add_alighting( trip_id, arrival )
+            
+        return ret
+        
+    def expound(self):
+        alightingstrs = []
+        
+        for i in range(self.num_alightings):
+            trip_id, arrival_secs = self.get_alighting(i)
+            alightingstrs.append( "on trip id='%s' at %s"%(trip_id, unparse_secs(arrival_secs)) )
+        
+        ret = """Alight
+   agency (internal id): %d
+   service_id (internal id): %d
+   calendar:
+%s
+   timezone:
+%s
+   alightings:
+%s"""%( self.agency,
+        self.int_service_id,
+        indent( self.calendar.expound("America/Chicago"), 6 ),
+        indent( self.timezone.expound(), 6 ),
+        indent( "\n".join(alightingstrs), 6 ) )
+
+        return ret
+
+class VertexNotFoundError(Exception): pass
 
 Graph._cnew = lgs.gNew
 Graph._cdel = lgs.gDestroy
 Graph._cadd_vertex = ccast(lgs.gAddVertex, Vertex)
+Graph._cremove_vertex = lgs.gRemoveVertex
 Graph._cget_vertex = ccast(lgs.gGetVertex, Vertex)
 Graph._cadd_edge = ccast(lgs.gAddEdge, Edge)
 Graph._cshortest_path_tree = ccast(lgs.gShortestPathTree, ShortestPathTree)
@@ -1196,12 +1315,12 @@ Edge._cpayload = ccast(lgs.eGetPayload, EdgePayload)
 Edge._cwalk = ccast(lgs.eWalk, State)
 Edge._cwalk_back = lgs.eWalkBack
 
-EdgePayload._subtypes = {0:Street,1:TripHopSchedule,2:TripHop,3:Link,4:GenericPyPayload,5:None,6:Wait,7:Headway,8:TripBoard,9:Crossing,10:Alight,11:HeadwayBoard}
+EdgePayload._subtypes = {0:Street,1:None,2:None,3:Link,4:GenericPyPayload,5:None,
+                         6:Wait,7:Headway,8:TripBoard,9:Crossing,10:Alight,
+                         11:HeadwayBoard,12:Egress,13:HeadwayAlight,14:ElapseTime}
 EdgePayload._cget_type = lgs.epGetType
 EdgePayload._cwalk = lgs.epWalk
 EdgePayload._cwalk_back = lgs.epWalkBack
-EdgePayload._ccollapse = ccast(lgs.epCollapse, EdgePayload)
-EdgePayload._ccollapse_back = ccast(lgs.epCollapseBack, EdgePayload)
 
 ServicePeriod._cnew = lgs.spNew
 ServicePeriod._crewind = ccast(lgs.spRewind, ServicePeriod)
@@ -1210,8 +1329,11 @@ ServicePeriod._cnext = ccast(lgs.spNextPeriod, ServicePeriod)
 ServicePeriod._cprev = ccast(lgs.spPreviousPeriod, ServicePeriod)
 
 ServiceCalendar._cnew = lgs.scNew
+ServiceCalendar._cdel = lgs.scDestroy
 ServiceCalendar._cperiod_of_or_before = ccast(lgs.scPeriodOfOrBefore, ServicePeriod)
 ServiceCalendar._cperiod_of_or_after = ccast(lgs.scPeriodOfOrAfter, ServicePeriod)
+
+Timezone._cdel = lgs.tzDestroy
 
 State._cnew = lgs.stateNew
 State._cdel = lgs.stateDestroy
@@ -1220,25 +1342,15 @@ State._ccopy = ccast(lgs.stateDup, State)
 ListNode._cdata = ccast(lgs.liGetData, Edge)
 ListNode._cnext = ccast(lgs.liGetNext, ListNode)
 
-TripHop._cnew = lgs.triphopNew
-TripHop._cdel = lgs.triphopDestroy
-TripHop._cwalk = lgs.triphopWalk
-TripHop._cwalk_back = lgs.triphopWalkBack
-
-TripHopSchedule._cdel = lgs.thsDestroy
-TripHopSchedule._chop = ccast(lgs.thsGetHop, TripHop)
-TripHopSchedule._cwalk = lgs.thsWalk
-TripHopSchedule._cwalk_back = lgs.thsWalkBack
-TripHopSchedule._cget_last_hop = lgs.thsGetLastHop
-TripHopSchedule._cget_next_hop = lgs.thsGetNextHop
-#TripHopSchedule._ccollapse = ccast(lgs.thsCollapse, TripHop)
-#TripHopSchedule._ccollapse_back = lgs.thsCollapseBack
-#TripHopSchedule._collapse_type = TripHop
-
-Street._cnew = lgs.streetNew
+Street._cnew = lgs.streetNewElev
 Street._cdel = lgs.streetDestroy
-Street._cwalk = lgs.epWalk
+Street._cwalk = lgs.streetWalk
 Street._cwalk_back = lgs.streetWalkBack
+
+Egress._cnew = lgs.egressNew
+Egress._cdel = lgs.egressDestroy
+Egress._cwalk = lgs.egressWalk
+Egress._cwalk_back = lgs.egressWalkBack
 
 Link._cnew = lgs.linkNew
 Link._cdel = lgs.linkDestroy
@@ -1249,6 +1361,12 @@ Wait._cnew = lgs.waitNew
 Wait._cdel = lgs.waitDestroy
 Wait._cwalk = lgs.waitWalk
 Wait._cwalk_back = lgs.waitWalkBack
+
+ElapseTime._cnew = lgs.elapseTimeNew
+ElapseTime._cdel = lgs.elapseTimeDestroy
+ElapseTime._cwalk = lgs.elapseTimeWalk
+ElapseTime._cwalk_back = lgs.elapseTimeWalkBack
+
 
 TripBoard._cnew = lgs.tbNew
 TripBoard._cdel = lgs.tbDestroy
@@ -1264,6 +1382,10 @@ Alight._cdel = lgs.alDestroy
 HeadwayBoard._cnew = lgs.hbNew
 HeadwayBoard._cdel = lgs.hbDestroy
 HeadwayBoard._cwalk = lgs.epWalk
+
+HeadwayAlight._cnew = lgs.haNew
+HeadwayAlight._cdel = lgs.haDestroy
+HeadwayAlight._cwalk = lgs.epWalk
 
 WalkOptions._cnew = lgs.woNew
 WalkOptions._cdel = lgs.woDestroy

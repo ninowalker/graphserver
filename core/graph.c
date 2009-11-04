@@ -43,6 +43,17 @@ gAddVertex( Graph* this, char *label ) {
   return exists;
 }
 
+void
+gRemoveVertex( Graph* this, char *label, int free_vertex_payload, int free_edge_payloads ) {
+    Vertex *exists = gGetVertex( this, label );
+    if(!exists) {
+        return;
+    }
+    
+    hashtable_remove( this->vertices, label );
+    vDestroy( exists, free_vertex_payload, free_edge_payloads );
+}
+
 void 
 gAddVertices( Graph* this, char **labels, int n ) {
   int i;
@@ -67,17 +78,6 @@ gAddEdge( Graph* this, char *from, char *to, EdgePayload *payload ) {
   return vLink( vtx_from, vtx_to, payload );
 }
 
-Edge*
-gAddEdgeGeom( Graph* this, char *from, char *to, EdgePayload *payload, char * datageom ) {
-  Vertex* vtx_from = gGetVertex( this, from );
-  Vertex* vtx_to   = gGetVertex( this, to );
-
-  if(!(vtx_from && vtx_to))
-    return NULL;
-
-  return vLinkGeom( vtx_from, vtx_to, payload, datageom ); // link two vertices
-}
-
 Vertex**
 gVertices( Graph* this, long* num_vertices ) {
   unsigned int nn = hashtable_count(this->vertices);
@@ -96,6 +96,33 @@ gVertices( Graph* this, long* num_vertices ) {
 
   *num_vertices = nn;
   return ret;
+}
+
+long
+set_spt_edge_thickness( Edge* edge ) {
+    long thickness = edge->to->payload->weight - edge->from->payload->weight;
+    
+    ListNode* outgoing_edge_node = vGetOutgoingEdgeList( edge->to );
+    while(outgoing_edge_node) {
+        thickness += set_spt_edge_thickness( outgoing_edge_node->data );
+        outgoing_edge_node = outgoing_edge_node->next;
+    }
+    
+    edge->thickness = thickness;
+    
+    return thickness;
+}
+
+void
+gSetThicknesses( Graph* this, char *root_label ) {
+    Vertex* root = gGetVertex( this, root_label );
+
+    ListNode* outgoing_edge_node = vGetOutgoingEdgeList( root );
+
+    while(outgoing_edge_node) {
+        set_spt_edge_thickness( outgoing_edge_node->data );
+        outgoing_edge_node = outgoing_edge_node->next;
+    }
 }
 
 #undef RETRO
@@ -230,6 +257,27 @@ gSize( Graph* this ) {
   return hashtable_count( this->vertices );
 }
 
+void
+gSetVertexEnabled( Graph *this, char *label, int enabled ) {
+    
+    Vertex *vv = gGetVertex( this, label );
+    
+    ListNode* outgoing_edge_node = vGetOutgoingEdgeList( vv );
+
+    while(outgoing_edge_node) {
+        eSetEnabled( outgoing_edge_node->data, enabled );
+        outgoing_edge_node = outgoing_edge_node->next;
+    }
+
+    ListNode* incoming_edge_node = vGetIncomingEdgeList( vv );
+
+    while(incoming_edge_node) {
+        eSetEnabled( incoming_edge_node->data, enabled );
+        incoming_edge_node = incoming_edge_node->next;
+    }
+    
+}
+
 
 // VERTEX FUNCTIONS
 
@@ -288,20 +336,6 @@ vLink(Vertex* this, Vertex* to, EdgePayload* payload) {
     return link;
 }
 
-Edge*
-vLinkGeom(Vertex* this, Vertex* to, EdgePayload* payload, char* datageom) {
-    // create edge object
-    Edge* link = eNewGeom(this, to, payload, datageom);
-
-    ListNode* outlistnode = liNew( link );
-    liInsertAfter( this->outgoing, outlistnode );
-    this->degree_out++;
-    ListNode* inlistnode = liNew( link );
-    liInsertAfter( to->incoming, inlistnode );
-    to->degree_in++;
-    return link;
-}
-
 //the comments say it all
 Edge*
 vSetParent( Vertex* this, Vertex* parent, EdgePayload* payload ) {
@@ -315,19 +349,6 @@ vSetParent( Vertex* this, Vertex* parent, EdgePayload* payload ) {
 
     //add incoming edge
     return vLink( parent, this, payload );
-}
-
-Edge*
-vSetParentGeom( Vertex* this, Vertex* parent, EdgePayload* payload, char * geomdata ) {
-    //delete all incoming edges
-    ListNode* edges = vGetIncomingEdgeList( this );
-    while(edges) {
-      eDestroy( edges->data, 0 );
-      edges = edges->next;
-    }
-
-    //add incoming edge
-    return vLinkGeom( parent, this, payload, geomdata);
 }
 
 ListNode*
@@ -370,6 +391,16 @@ vPayload( Vertex* this ) {
 	return this->payload;
 }
 
+long
+eGetThickness(Edge *this) {
+    return this->thickness;
+}
+
+void
+eSetThickness(Edge *this, long thickness) {
+    this->thickness = thickness;
+}
+
 // EDGE FUNCTIONS
 
 Edge*
@@ -378,17 +409,8 @@ eNew(Vertex* from, Vertex* to, EdgePayload* payload) {
     this->from = from;
     this->to = to;
     this->payload = payload;
-    this->geom = NULL;
-    return this;
-}
-
-Edge*
-eNewGeom(Vertex* from, Vertex* to, EdgePayload* payload,char * datageom) {
-    Edge *this = (Edge *)malloc(sizeof(Edge));
-    this->from = from;
-    this->to = to;
-    this->payload = payload;
-    this->geom = geomNew(datageom);
+    this->thickness = -1;
+    this->enabled = 1;
     return this;
 }
 
@@ -400,24 +422,25 @@ eDestroy(Edge *this, int destroy_payload) {
 
     vRemoveOutEdgeRef( this->from, this );
     vRemoveInEdgeRef( this->to, this );
-    geomDestroy(this->geom);
     free(this);
 }
 
 State*
 eWalk(Edge *this, State* params, WalkOptions* options) {
-  return epWalk( this->payload, params, options );
+  if( this->enabled ) {
+    return epWalk( this->payload, params, options );
+  } else {
+    return NULL;
+  }
 }
 
 State*
 eWalkBack(Edge *this, State* params, WalkOptions* options) {
-  return epWalkBack( this->payload, params, options );
-}
-
-Edge*
-eGeom(Edge* this,char * datageom) {
-	this->geom = geomNew(datageom);
-	return this;
+  if( this->enabled ) {
+    return epWalkBack( this->payload, params, options );
+  } else {
+    return NULL;
+  }
 }
 
 Vertex*
@@ -433,6 +456,16 @@ eGetTo(Edge *this) {
 EdgePayload*
 eGetPayload(Edge *this) {
   return this->payload;
+}
+
+int
+eGetEnabled(Edge *this) {
+    return this->enabled;
+}
+
+void
+eSetEnabled(Edge *this, int enabled) {
+    this->enabled = enabled;
 }
 
 // LIST FUNCTIONS

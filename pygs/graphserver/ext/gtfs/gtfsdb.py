@@ -39,7 +39,8 @@ def load_gtfs_table_to_sqlite(fp, gtfs_basename, cc, header=None):
     rd = csv.reader( ur )
 
     # create map of field locations in gtfs header to field locations as specified by the table definition
-    gtfs_header = next(rd)
+    gtfs_header = rd.next()
+    
     gtfs_field_indices = dict(zip(gtfs_header, range(len(gtfs_header))))
     
     field_name_locations = [gtfs_field_indices[field_name] if field_name in gtfs_field_indices else None for field_name, field_type, field_converter in header]
@@ -59,7 +60,7 @@ def load_gtfs_table_to_sqlite(fp, gtfs_basename, cc, header=None):
         
         _line = []
         for i, converter in field_operator:
-            if i is not None:
+            if i is not None and line[i] != "":
                 if converter:
                     _line.append( converter(line[i]) )
                 else:
@@ -89,7 +90,7 @@ class TripBundle:
     def add_trip(self, trip_id):
         self.trip_ids.append( trip_id )
         
-    def stop_time_bundle( self, stop_sequence, service_id ):
+    def stop_time_bundle( self, stop_id, service_id ):
         c = self.gtfsdb.conn.cursor()
         
         query = """
@@ -97,26 +98,43 @@ SELECT stop_times.* FROM stop_times, trips
   WHERE stop_times.trip_id = trips.trip_id 
         AND trips.trip_id IN (%s) 
         AND trips.service_id = ? 
-        AND stop_times.stop_sequence = ? 
+        AND stop_times.stop_id = ? 
   ORDER BY departure_time"""%(",".join(["'%s'"%x for x in self.trip_ids]))
       
-        c.execute(query, (service_id,stop_sequence))
+        c.execute(query, (service_id,str(stop_id)))
         
         return list(c)
-        
+    
     def stop_time_bundles( self, service_id ):
-        i = 1
-        while True:
-            yld = self.stop_time_bundle( i, service_id )
-            if len(yld)==0:
-                break
-            else:
-                yield yld
+        
+        c = self.gtfsdb.conn.cursor()
+        
+        query = """
+        SELECT stop_times.trip_id, 
+               stop_times.arrival_time, 
+               stop_times.departure_time, 
+               stop_times.stop_id, 
+               stop_times.stop_sequence, 
+               stop_times.shape_dist_traveled 
+        FROM stop_times, trips
+        WHERE stop_times.trip_id = trips.trip_id
+        AND trips.trip_id IN (%s)
+        AND trips.service_id = ?
+        ORDER BY stop_sequence"""%(",".join(["'%s'"%x for x in self.trip_ids]))
             
-            i += 1
+        #bundle queries by trip_id
+        
+        trip_id_sorter = {}
+        for trip_id, arrival_time, departure_time, stop_id, stop_sequence, shape_dist_traveled in c.execute(query, (service_id,)):
+            if trip_id not in trip_id_sorter:
+                trip_id_sorter[trip_id] = []
+                
+            trip_id_sorter[trip_id].append( (trip_id, arrival_time, departure_time, stop_id, stop_sequence, shape_dist_traveled) )
+        
+        return zip(*(trip_id_sorter.values()))
             
     def __repr__(self):
-        return "<TripBundle n_trips: %d n_stops: %d>"%(len(self.trip_ids), len(self.pattern_signature[0]))
+        return "<TripBundle n_trips: %d n_stops: %d>"%(len(self.trip_ids), len(self.pattern.stop_ids))
 
 class GTFSDatabase:
     TRIPS_DEF = ("trips", (("route_id",   None, None),
@@ -130,7 +148,8 @@ class GTFSDatabase:
                                      ("arrival_time", "INTEGER", parse_gtfs_time),
                                      ("departure_time", "INTEGER", parse_gtfs_time),
                                      ("stop_id", None, None),
-                                     ("stop_sequence", "INTEGER", None)))
+                                     ("stop_sequence", "INTEGER", None),
+                                     ("shape_dist_traveled", "FLOAT", None)))
     STOPS_DEF = ("stops", (("stop_id", None, None),
                            ("stop_name", None, None),
                            ("stop_lat", "FLOAT", None),
@@ -161,7 +180,7 @@ class GTFSDatabase:
                                        ("stop_id2", None, None),
                                        ("type", None, None),
                                        ("distance", "INTEGER", None)))
-    SHAPES_DEF = ("shape_id", (("shape_id", None, None),
+    SHAPES_DEF = ("shapes", (("shape_id", None, None),
                                ("shape_pt_lat", "FLOAT", None),
                                ("shape_pt_lon", "FLOAT", None),
                                ("shape_pt_sequence", "INTEGER", None),
@@ -175,7 +194,8 @@ class GTFSDatabase:
                 AGENCY_DEF, 
                 FREQUENCIES_DEF, 
                 ROUTES_DEF, 
-                CONNECTIONS_DEF)
+                CONNECTIONS_DEF,
+                SHAPES_DEF)
     
     def __init__(self, sqlite_filename, overwrite=False):
         if overwrite:
@@ -197,7 +217,7 @@ class GTFSDatabase:
             if reporter: reporter.write( "loading table %s\n"%tablename )
             
             try:
-                trips_file = iterdecode( zf.open(tablename+".txt"), "utf-8" )
+                trips_file = iterdecode( zf.read(tablename+".txt").split("\n"), "utf-8" )
                 load_gtfs_table_to_sqlite(trips_file, tablename, c, table_def)
             except KeyError:
                 if reporter: reporter.write( "NOTICE: GTFS feed has no file %s.txt, cannot load\n"%tablename )
@@ -209,6 +229,7 @@ class GTFSDatabase:
     def _create_indices(self, c):
         
         c.execute( "CREATE INDEX stop_times_trip_id ON stop_times (trip_id)" )
+        c.execute( "CREATE INDEX stop_times_stop_id ON stop_times (stop_id)" )
         c.execute( "CREATE INDEX trips_trip_id ON trips (trip_id)" )
         c.execute( "CREATE INDEX stops_stop_lat ON stops (stop_lat)" )
         c.execute( "CREATE INDEX stops_stop_lon ON stops (stop_lon)" )
@@ -225,7 +246,7 @@ class GTFSDatabase:
     def stop(self, stop_id):
         c = self.conn.cursor()
         c.execute( "SELECT * FROM stops WHERE stop_id = ?", (stop_id,) )
-        ret = next(c)
+        ret = c.next()
         c.close()
         return ret
         
@@ -233,11 +254,11 @@ class GTFSDatabase:
         c = self.conn.cursor()
         c.execute( "SELECT count(*) FROM stops" )
         
-        ret = next(c)[0]
+        ret = c.next()[0]
         c.close()
         return ret
 
-    def compile_trip_bundles(self, reporter=None):
+    def compile_trip_bundles(self, maxtrips=None, reporter=None):
         
         c = self.conn.cursor()
 
@@ -245,11 +266,18 @@ class GTFSDatabase:
         bundles = {}
 
         c.execute( "SELECT count(*) FROM trips" )
-        n_trips = next(c)[0]
+        n_trips = c.next()[0]
+        
+        if maxtrips is not None and maxtrips < n_trips:
+            n_trips = maxtrips;
 
-        c.execute( "SELECT trip_id FROM trips" )
+        if maxtrips is not None:
+            c.execute( "SELECT trip_id FROM trips LIMIT ?", (maxtrips,) )
+        else:
+            c.execute( "SELECT trip_id FROM trips" )
+            
         for i, (trip_id,) in enumerate(c):
-            if reporter and i%(n_trips//50)==0: reporter.write( "%d/%d trips grouped by %d patterns\n"%(i,n_trips,len(bundles)))
+            if reporter and i%(n_trips//50+1)==0: reporter.write( "%d/%d trips grouped by %d patterns\n"%(i,n_trips,len(bundles)))
             
             d = self.conn.cursor()
             d.execute( "SELECT trip_id, arrival_time, departure_time, stop_id FROM stop_times WHERE trip_id=? ORDER BY stop_sequence", (trip_id,) )
@@ -293,7 +321,7 @@ class GTFSDatabase:
         
         c.execute( "SELECT min(stop_lon), min(stop_lat), max(stop_lon), max(stop_lat) FROM stops" )
         
-        ret = next(c)
+        ret = c.next()
         c.close()
         return ret
         
@@ -345,6 +373,9 @@ class GTFSDatabase:
     DOW_INDEX = dict(zip(range(len(DOWS)),DOWS))
     
     def service_periods(self, datetime):
+        datetimestr = datetime.strftime( "%Y%m%d" ) #datetime to string like "20081225"
+        datetimeint = int(datetimestr)              #int like 20081225. These ints have the same ordering as regular dates, so comparison operators work
+        
         # Get the gtfs date range. If the datetime is out of the range, no service periods are in effect
         start_date, end_date = self.date_range()
         if datetime < start_date or datetime > end_date:
@@ -352,10 +383,16 @@ class GTFSDatabase:
         
         # Use the day-of-week name to query for all service periods that run on that day
         dow_name = self.DOW_INDEX[datetime.weekday()]
-        sids = set( [x[0] for x in self.execute( "SELECT * FROM calendar WHERE %s=1"%dow_name )] )
+        service_periods = list( self.execute( "SELECT service_id, start_date, end_date FROM calendar WHERE %s=1"%dow_name ) )
+         
+        # Exclude service periods whose range does not include this datetime
+        service_periods = [x for x in service_periods if (int(x[1]) <= datetimeint and int(x[2]) >= datetimeint)]
+        
+        # Cut service periods down to service IDs
+        sids = set( [x[0] for x in service_periods] )
             
         # For each exception on the given datetime, add or remove service_id to the accumulating list
-        datetimestr = datetime.strftime( "%Y%m%d" )
+        
         for exception_sid, exception_type in self.execute( "select service_id, exception_type from calendar_dates WHERE date = ?", (datetimestr,) ):
             if exception_type == 1:
                 sids.add( exception_sid )
@@ -369,9 +406,65 @@ class GTFSDatabase:
         query = "SELECT DISTINCT service_id FROM (SELECT service_id FROM calendar UNION SELECT service_id FROM calendar_dates)"
         
         return [x[0] for x in self.execute( query )]
-                
+    
+    def shape(self, shape_id):
+        query = "SELECT shape_pt_lon, shape_pt_lat, shape_dist_traveled from shapes where shape_id = %s order by shape_pt_sequence" % shape_id
+        
+        return list(self.execute( query ))
+    
+    def shape_between(self, trip_id, stop1, stop2):
+        query = """SELECT t.shape_id, st.shape_dist_traveled, st.stop_id, st.stop_sequence
+                     FROM trips t 
+                     JOIN stop_times st ON st.trip_id = t.trip_id 
+                     WHERE t.trip_id = %s and (st.stop_id = '%s' or st.stop_id = '%s')
+                     ORDER BY stop_sequence""" % (trip_id, stop1, stop2)
+        
+        distances = []
+        shape_id = None
+        started = None
+        for x in self.execute( query ):
+            if not started and x[2] == stop1:
+                shape_id = x[0]
+                started = True            
+                distances.append(x[1])
+            
+            if started and stop2 == x[2]:
+                distances.append(x[1])
+                break
+            
+        if not shape_id:
+            return None
+        
+        t_min = min(distances)
+        t_max = max(distances)
+        
+        shape = []
+        last = None
+        total_traveled = 0
+        for pt in self.shape(shape_id):
+            dist_traveled = pt[2]
+            if dist_traveled > t_min and dist_traveled < t_max: 
+                if len(shape) == 0 and total_traveled != 0 and t_min != 0 and dist_traveled - total_traveled != 0:
+                    # interpolate first node:
+                    percent_along = (dist_traveled - t_min) / (dist_traveled - total_traveled)
+                    shape.append((last[0] + (pt[0] - last[0])*percent_along,
+                                  last[1] + (pt[1] - last[1])*percent_along))
+                else:                    
+                    shape.append(last)
+                    last = (pt[0],pt[1])
+            elif dist_traveled > t_max:
+                # calculate the differnce and interpolate
+                percent_along = (dist_traveled - t_max) / (dist_traveled - total_traveled)
+                shape.append((last[0] + (pt[0] - last[0])*percent_along,
+                              last[1] + (pt[1] - last[1])*percent_along))
+                return shape
+            else:
+                last = (pt[0],pt[1])
+            total_traveled = dist_traveled
+        
+        return shape
 
-def main():
+def main_inspect_gtfsdb():
     from sys import argv
     
     if len(argv) < 2:
@@ -407,4 +500,16 @@ def main():
 
     pass
 
-if __name__=='__main__': main()
+def main_build_gtfsdb():
+    if len(sys.argv) < 3:
+        print "Converts GTFS file to GTFS-DB, which is super handy\nusage: python process_gtfs.py gtfs_filename, gtfsdb_filename"
+        exit()
+    
+    gtfsdb_filename = sys.argv[2]
+    gtfs_filename = sys.argv[1]
+ 
+    gtfsdb = GTFSDatabase( gtfsdb_filename, overwrite=True )
+    gtfsdb.load_gtfs( gtfs_filename, reporter=sys.stdout )
+
+
+if __name__=='__main__': main_inspect_gtfsdb()

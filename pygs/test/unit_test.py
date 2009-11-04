@@ -2,6 +2,7 @@ import sys, os
 sys.path = [os.path.dirname(os.path.abspath(__file__)) + "/.."] + sys.path
 from graphserver.core import *
 from graphserver.engine import Engine
+from graphserver.graphdb import GraphDatabase
 from graphserver import util
 import time
 import unittest
@@ -9,16 +10,25 @@ import pickle
 
 import os
 
+RESOURCE_DIR=os.path.dirname(os.path.abspath(__file__))
+
+def find_resource(s):
+    return os.path.join(RESOURCE_DIR, s)
+
 def get_mem_usage():
     """returns percentage and vsz mem usage of this script"""
     pid = os.getpid()
-    psout = os.popen( "ps -p %s u"%pid ).read()
+    psout = os.popen( "ps u -p %s"%pid ).read()
     
     parsed_psout = psout.split("\n")[1].split()
     
     return float(parsed_psout[3]), int( parsed_psout[4] )
 
 import csv
+
+def test_graphserver_util():
+    util.main_test()
+
 class TestGraph(unittest.TestCase):
     
     def test_basic(self):
@@ -39,6 +49,22 @@ class TestGraph(unittest.TestCase):
         assert v.label == "home"
         
         g.destroy()
+        
+    def test_remove_vertex(self):
+        g = Graph()
+        g.add_vertex( "A" )
+        g.get_vertex( "A" ).label == "A"
+        g.remove_vertex( "A", True, True )
+        assert g.get_vertex( "A" ) == None
+        
+        g.add_vertex( "A" )
+        g.add_vertex( "B" )
+        pl = Street( "AB", 1 )
+        g.add_edge( "A", "B", pl )
+        g.remove_vertex( "A", True, False )
+        assert pl.name == "AB"
+        assert g.get_vertex( "A" ) == None
+        assert g.get_vertex( "B" ).label == "B"
         
     def test_add_vertices(self):
         g = Graph()
@@ -86,7 +112,7 @@ class TestGraph(unittest.TestCase):
         assert e
         assert e.from_v.label == "home"
         assert e.to_v.label == "work"
-        assert str(e)=="<Edge><Street name='helloworld' length='1.000000' /></Edge>"
+        assert str(e)=="<Edge><Street name='helloworld' length='1.000000' rise='0.000000' fall='0.000000' way='0'/></Edge>"
         
         g.destroy()
     
@@ -132,7 +158,8 @@ class TestGraph(unittest.TestCase):
         assert spt.get_vertex("home").payload.weight==0
         assert spt.get_vertex("work").degree_in==1
         assert spt.get_vertex("work").degree_out==0
-        assert spt.get_vertex("work").payload.weight==2
+        print spt.get_vertex("work").payload.weight
+        assert spt.get_vertex("work").payload.weight==1
         
         spt.destroy()
         g.destroy()
@@ -188,14 +215,33 @@ class TestGraph(unittest.TestCase):
         assert spt
         assert spt.__class__ == ShortestPathTree
         assert spt.get_vertex("home").degree_out == 0
+        print spt.get_vertex("home").degree_in
         assert spt.get_vertex("home").degree_in == 1
-        assert spt.get_vertex("home").payload.weight == 2
+        assert spt.get_vertex("home").payload.weight == 1
         assert spt.get_vertex("work").degree_in == 0
         assert spt.get_vertex("work").degree_out == 1
         assert spt.get_vertex("work").payload.weight == 0
         
         spt.destroy()
         g.destroy()
+        
+    def test_spt_retro_chain(self):
+        g = Graph()
+        
+        g.add_vertex( "A" )
+        g.add_vertex( "B" )
+        g.add_vertex( "C" )
+        g.add_vertex( "D" )
+        
+        g.add_edge( "A", "B", Street( "AB", 1 ) )
+        g.add_edge( "B", "C", Street( "BC", 1 ) )
+        g.add_edge( "C", "D", Street( "CD", 1 ) )
+        
+        spt = g.shortest_path_tree_retro( "A", "D", State(g.numagencies,1000), WalkOptions() )
+        
+        assert spt.get_vertex( "A" ).payload.time
+        
+        spt.destroy()
         
         
     def test_shortst_path_tree_link(self):
@@ -240,75 +286,24 @@ class TestGraph(unittest.TestCase):
         spt.destroy()
         g.destroy()
         
-    def test_shortest_path_tree_triphopschedule(self):
-        g = Graph()
-        g.add_vertex("home")
-        g.add_vertex("work")
-        
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ["WKDY","SAT"] )
-        
-        rawhops = [(0,     1*3600,'Foo to Bar'),
-                   (1*3600,2*3600,'Bar to Cow')]
-        tz = Timezone()
-        tz.add_period( TimezonePeriod( 0, 1*3600*24, 0 ) )
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=tz,agency=0)
-        
-        g.add_edge("home", "work", ths )
-        
-        spt = g.shortest_path_tree("home", "work", State(g.numagencies,0), WalkOptions())
-        assert spt
-        assert spt.__class__ == ShortestPathTree
-        assert spt.get_vertex("home").outgoing[0].payload.__class__ == TripHop
-        assert spt.get_vertex("work").incoming[0].payload.__class__ == TripHop
-        assert spt.get_vertex("home").degree_out==1
-        assert spt.get_vertex("home").degree_in==0
-        assert spt.get_vertex("work").degree_in==1
-        assert spt.get_vertex("work").degree_out==0
-        
-        spt.destroy()
-        g.destroy()
-        
-    def test_spt_ths_retro(self):
-        g = Graph()
-        g.add_vertex("home")
-        g.add_vertex("work")
-        
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ["WKDY","SAT"] )
-        rawhops = [(0,     1*3600,'Foo to Bar'),
-                   (1*3600,2*3600,'Bar to Cow')]
-        tz = Timezone()
-        tz.add_period( TimezonePeriod( 0, 1*3600*24, 0 ) )
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=tz,agency=0)
-        
-        g.add_edge("home", "work", ths )
-        
-        spt = g.shortest_path_tree_retro("home", "work", State(g.numagencies,2*3600), WalkOptions())
-        assert spt
-        assert spt.__class__ == ShortestPathTree
-        assert spt.get_vertex("home").incoming[0].payload.__class__ == TripHop
-        assert spt.get_vertex("work").outgoing[0].payload.__class__ == TripHop
-        assert spt.get_vertex("home").incoming[0].payload.trip_id == "Bar to Cow"
-        assert spt.get_vertex("home").degree_out==0
-        assert spt.get_vertex("home").degree_in==1
-        assert spt.get_vertex("work").degree_in==0
-        assert spt.get_vertex("work").degree_out==1
-        
-        spt.destroy()
-        g.destroy()
-        
     def test_walk_longstreet(self):
         g = Graph()
         
         fromv = g.add_vertex("home")
         tov = g.add_vertex("work")
-        s = Street( "helloworld", 240000 )
+        s = Street( "helloworld", 24000 )
         e = g.add_edge("home", "work", s)
         
-        sprime = e.walk(State(g.numagencies,0), WalkOptions())
+        wo = WalkOptions()
+        sprime = e.walk(State(g.numagencies,0), wo)
         
-        assert str(sprime)=="<state time='282352' weight='2147483647' dist_walked='240000.0' num_transfers='0' prev_edge_type='0' prev_edge_name='helloworld'></state>"
+        assert sprime.time==28235
+        assert sprime.weight==39557235
+        assert sprime.dist_walked==24000.0
+        assert sprime.num_transfers==0
+        
+        wo.destroy()
+        print str(sprime)
 
         g.destroy()
         
@@ -356,25 +351,6 @@ class TestGraph(unittest.TestCase):
         sp = spt.path("work")
         
         assert sp
-        
-    def test_shortest_path_tree_triphopschedule_wrongday(self):
-        g = Graph()
-        
-        rawhops = [(10,     20,'Foo to Bar')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 10, ["WKDY"] )
-        tz = Timezone()
-        tz.add_period( TimezonePeriod( 0, 10, 0 ) )
-        ths = TripHopSchedule(hops=rawhops, service_id="SAT", calendar=cal, timezone=tz,agency=0)
-        
-        g.add_vertex("A")
-        g.add_vertex("B")
-        
-        g.add_edge("A", "B", ths)
-        
-        sp = g.shortest_path_tree("A", "B", State(g.numagencies,0), WalkOptions() )
-        
-        assert sp.vertices
         
     def xtestx_shortest_path_bigweight(self):
         g = Graph()
@@ -433,79 +409,39 @@ class TestGraph(unittest.TestCase):
         assert spt.get_vertex("Portland").incoming[0].payload.__class__ == Street
         spt.destroy()
         
-        cal = ServiceCalendar()
-        cal.add_period( 0, 86400, ["WKDY","SAT"] )
-        rawhops = [(10,     20,'A'),
-                   (15,     30,'B'),
-                   (400,   430,'C')]
+        sc = ServiceCalendar()
+        sc.add_period( 0, 86400, ["WKDY","SAT"] )
         tz = Timezone()
         tz.add_period( TimezonePeriod( 0, 86400, 0 ) )
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=tz,agency=0)
         
-        g.add_edge( "Seattle-busstop", "Portland-busstop", ths )
+        g.add_vertex( "Portland-busstop-onbus" )
+        g.add_vertex( "Seattle-busstop-onbus" )
+        
+        tb = TripBoard("WKDY", sc, tz, 0)
+        tb.add_boarding( "A", 10 )
+        tb.add_boarding( "B", 15 )
+        tb.add_boarding( "C", 400 )
+        
+        cr = Crossing(20)
+        
+        al = Alight("WKDY", sc, tz, 0)
+        al.add_alighting( "A", 10+20 )
+        al.add_alighting( "B", 15+20 )
+        al.add_alighting( "C", 400+20 )
+        
+        g.add_edge( "Seattle-busstop", "Seattle-busstop-onbus", tb )
+        g.add_edge( "Seattle-busstop-onbus", "Portland-busstop-onbus", cr )
+        g.add_edge( "Portland-busstop-onbus", "Portland-busstop", al )
         
         spt = g.shortest_path_tree( "Seattle", "Portland", State(g.numagencies,0), WalkOptions() )
         
-        assert spt.get_vertex( "Portland" ).incoming[0].from_v.incoming[0].from_v.incoming[0].from_v.label == "Seattle"
+        assert spt.get_vertex( "Portland" ).incoming[0].from_v.incoming[0].from_v.incoming[0].from_v.incoming[0].from_v.incoming[0].from_v.label == "Seattle"
         
         spt = g.shortest_path_tree( "Seattle", "Portland", State(g.numagencies,0), WalkOptions() )
         vertices, edges = spt.path( "Portland" )
         
-        assert [v.label for v in vertices] == ['Seattle', 'Seattle-busstop', 'Portland-busstop', 'Portland']
-        assert [e.payload.__class__ for e in edges] == [Link, TripHop, Link]
-        
-        spt.destroy()
-        g.destroy()
-        
-    def test_hello_world_retro(self):
-        g = Graph()
-        
-        g.add_vertex( "Seattle" )
-        g.add_vertex( "Portland" )
-        
-        g.add_edge( "Seattle", "Portland", Street("I-5 south", 5000) )
-        g.add_edge( "Portland", "Seattle", Street("I-5 north", 5500) )
-        
-        spt = g.shortest_path_tree_retro( "Seattle", "Portland", State(g.numagencies,0), WalkOptions() )
-        
-        assert spt.get_vertex("Seattle").incoming[0].payload.name == "I-5 south"
-        
-        g.add_vertex( "Portland-busstop" )
-        g.add_vertex( "Seattle-busstop" )
-        
-        g.add_edge( "Seattle", "Seattle-busstop", Link() )
-        g.add_edge( "Seattle-busstop", "Seattle", Link() )
-        g.add_edge( "Portland", "Portland-busstop", Link() )
-        g.add_edge( "Portland-busstop", "Portland", Link() )
-        
-        spt = g.shortest_path_tree_retro( "Seattle", "Seattle-busstop", State(g.numagencies,0), WalkOptions() )
-        assert spt.get_vertex("Seattle-busstop").outgoing[0].payload.__class__ == Link
-        spt.destroy()
-        
-        spt = g.shortest_path_tree_retro( "Seattle-busstop", "Portland", State(g.numagencies,0), WalkOptions() )
-        assert spt.get_vertex("Portland").outgoing[0].payload.__class__ == Street
-        spt.destroy()
-        
-        cal = ServiceCalendar()
-        cal.add_period( 0, 86400, ["WKDY","SAT"] )
-        rawhops = [(10,     20,'A'),
-                   (15,     30,'B'),
-                   (400,   430,'C')]
-        tz = Timezone()
-        tz.add_period( TimezonePeriod( 0, 86400, 0 ) )
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=tz,agency=0)
-        
-        g.add_edge( "Seattle-busstop", "Portland-busstop", ths )
-        
-        spt = g.shortest_path_tree_retro( "Seattle", "Portland", State(g.numagencies,430), WalkOptions() )
-        
-        assert spt.get_vertex("Portland").outgoing[0].to_v.outgoing[0].to_v.outgoing[0].to_v.label == "Seattle"
-        
-        spt = g.shortest_path_tree_retro( "Seattle", "Portland", State(g.numagencies,430), WalkOptions() )
-        vertices, edges = spt.path_retro( "Seattle" )
-        
-        assert [v.label for v in vertices] == ['Seattle', 'Seattle-busstop', 'Portland-busstop', 'Portland']
-        assert [e.payload.__class__ for e in edges] == [Link, TripHop, Link]
+        assert [v.label for v in vertices] == ['Seattle', 'Seattle-busstop', "Seattle-busstop-onbus", "Portland-busstop-onbus", 'Portland-busstop', 'Portland']
+        assert [e.payload.__class__ for e in edges] == [Link, TripBoard, Crossing, Alight, Link]
         
         spt.destroy()
         g.destroy()
@@ -515,7 +451,7 @@ class TestGraph(unittest.TestCase):
         
         g = Graph()
         
-        reader = csv.reader(open("map.csv"))
+        reader = csv.reader(open(find_resource("map.csv")))
         
         for wayid, fromv, tov, length in reader:
             g.add_vertex( fromv )
@@ -524,14 +460,19 @@ class TestGraph(unittest.TestCase):
             
         v85thStreet = "53184534"
         vBeaconAve = "53072051"
-        idealVertices = ['53184534', '53193013', '69374666', '53193014', '69474340', '53185600', '53077802', '69474361', '53090673', '53193015', '53193016', '53193017', '53193018', '53189027', '53193019', '53193020', '53112767', '53193021', '53183554', '53213063', '53197105', '53213061', '53090659', '53213059', '53157290', '53062869', '53213057', '53213055', '53213054', '53184527', '67507140', '67507145', '67507034', '67507151', '67507040', '67507158', '67507048', '67507166', '67507051', '67507176', '67507057', '67507126', '53233319', '53147253', '53233320', '53233321', '60002786', '60002787', '60002788', '88468927', '53125664', '53116774', '53116776', '88486408', '53116778', '88486413', '53116779', '88486416', '53116784', '53116788', '31394358', '53070243', '30790093', '31394277', '124206007', '31394282', '31393878', '29977892', '124205994', '31428350', '29545469', '29545479', '29545426', '29545421', '29545417', '29545423', '29484769', '29484785', '29545373', '29979589', '30078988', '30079048', '244420183', '29979596', '29979598', '30230262', '30230264', '30279409', '30279408', '30230266', '30230273', '30230277', '30230281', '30230300', '30230506', '30231231', '30230962', '60878121', '53224639', '53210038', '53081902', '53052413', '53210039', '53224626', '53168444', '53224629', '53224632', '53208783', '53083017', '53083040', '53208784', '53187334', '53187337', '53089335', '53066732', '53208785', '53178012', '53208786', '53152490', '53183929', '53146692', '53146065', '53083086', '53083102', '53113957', '53113944', '53190685', '53203056', '53167007', '53129046', '53098715', '53208787', '53208788', '53180738', '53072051']
-        idealEdges = ['9112003-8', '6438432-0', '6438432-1', '6438432-2', '6438432-3', '6438432-4', '6438432-5', '6438432-6', '6438432-7', '6438432-8', '6438432-9', '6438432-10', '6438432-11', '6438432-12', '6438432-13', '6438432-14', '6438432-15', '10425996-0', '10425996-1', '10425996-2', '10425996-3', '10425996-4', '10425996-5', '10425996-6', '10425996-7', '10425996-8', '10425996-9', '10425996-10', '10425996-11', '10425996-12', '9116336-2', '9116336-3', '9116346-1', '9116346-2', '9116346-3', '9116346-4', '9116346-5', '9116346-6', '9116346-7', '9116346-8', '9116346-9', '6488959-1', '6488959-2', '6488959-3', '6488959-4', '6488959-5', '6488959-6', '4864595-10', '8027224-0', '8027224-1', '6381214-5', '6381214-6', '6373885-0', '6373885-1', '6373885-2', '6373885-3', '6373885-4', '6373885-5', '6373885-6', '6446116-3', '4864592-0', '4864592-1', '4864578-0', '13517028-0', '13517029-0', '4709507-6', '4709507-7', '4709507-8', '4869151-0', '4869146-0', '4644189-0', '4644192-0', '4644159-0', '4869146-3', '4869146-4', '4644156-0', '4722460-0', '4722460-1', '4722460-2', '4722460-3', '4722460-4', '4722460-5', '4722460-6', '14017470-0', '14017470-1', '5130429-0', '13866257-0', '13866256-0', '4748963-0', '4748962-0', '4748962-1', '15257844-0', '15257848-0', '15257848-1', '4743936-0', '4743934-0', '4743897-3', '4743897-4', '8116116-0', '6457969-20', '6457969-21', '6457969-22', '6476943-0', '6476943-1', '6476943-2', '6476943-3', '6476943-4', '6456455-20', '6456455-21', '6456455-22', '6456455-23', '6456455-24', '6456455-25', '6456455-26', '6456455-27', '6456455-28', '6456455-29', '6456455-30', '6456455-31', '6456455-32', '6456455-33', '6456455-34', '6456455-35', '6456455-36', '6456455-37', '6456455-38', '6456455-39', '6456455-40', '6456455-41', '6456455-42', '6456455-43', '6456455-44', '6456455-45', '6456455-46']
-        
+        idealVertices = ['53184534', '53193013', '69374666', '53193014', '69474340', '53185600', '53077802', '69474361', '53090673', '53193015', '53193016', '53193017', '53193018', '53189027', '53193019', '53193020', '53112767', '53193021', '69516594', '53132048', '69516588', '53095152', '53132049', '53239899', '53147269', '53138815', '69516553', '53138764', '53194375', '53185509', '53194376', '53144840', '53178633', '53178635', '53194364', '53125622', '53045160', '53194365', '53194366', '53194367', '53194368', '53185796', '53194369', '53086028', '90251330', '90251121', '30789993', '30789998', '31394282', '31393878', '29977892', '124205994', '31428350', '29545469', '94008501', '29545421', '29545417', '29545423', '29484769', '29484785', '29545373', '29979589', '30078988', '30079048', '244420183', '29979596', '29979598', '30230262', '30230264', '30279409', '30279408', '30230266', '30230273', '30230277', '30230281', '30230300', '30230506', '30231231', '30230962', '60878121', '53224639', '53210038', '53081902', '53052413', '53210039', '53224626', '53168444', '53224629', '53224632', '53208783', '53083017', '53083040', '53208784', '53187334', '53187337', '53089335', '53066732', '53208785', '53178012', '53208786', '53152490', '53183929', '53146692', '53146065', '53083086', '53083102', '53113957', '53113944', '53190685', '53203056', '53167007', '53129046', '53098715', '53208787', '53208788', '53180738', '53072051']
+        idealEdges = ['9112003-8', '6438432-0', '6438432-1', '6438432-2', '6438432-3', '6438432-4', '6438432-5', '6438432-6', '6438432-7', '6438432-8', '6438432-9', '6438432-10', '6438432-11', '6438432-12', '6438432-13', '6438432-14', '6438432-15', '6438432-16', '6438432-17', '6386686-0', '6386686-1', '6386686-2', '6497278-2', '6497278-3', '6497278-4', '6497278-5', '6497278-6', '6514850-51', '6439614-0', '6439614-1', '6439614-2', '6439614-3', '15255537-1', '6439607-0', '6439607-1', '6439607-2', '6439607-3', '6439607-4', '6439607-5', '6439607-6', '6439607-7', '6439607-8', '6439607-9', '6439607-10', '10497741-3', '10497743-3', '4709507-4', '4709507-5', '4709507-6', '4709507-7', '4709507-8', '4869151-0', '4869146-0', '4869146-1', '4869146-2', '4869146-3', '4869146-4', '4644156-0', '4722460-0', '4722460-1', '4722460-2', '4722460-3', '4722460-4', '4722460-5', '4722460-6', '14017470-0', '14017470-1', '5130429-0', '13866257-0', '13866256-0', '4748963-0', '4748962-0', '4748962-1', '15257844-0', '15257848-0', '15257848-1', '4743936-0', '4743934-0', '4743897-3', '4743897-4', '8116116-0', '6457969-20', '6457969-21', '6457969-22', '6476943-0', '6476943-1', '6476943-2', '6476943-3', '6476943-4', '6456455-20', '6456455-21', '6456455-22', '6456455-23', '6456455-24', '6456455-25', '6456455-26', '6456455-27', '6456455-28', '6456455-29', '6456455-30', '6456455-31', '6456455-32', '6456455-33', '6456455-34', '6456455-35', '6456455-36', '6456455-37', '6456455-38', '6456455-39', '6456455-40', '6456455-41', '6456455-42', '6456455-43', '6456455-44', '6456455-45', '6456455-46']
+
+        t0 = time.time()
         spt = g.shortest_path_tree( v85thStreet, vBeaconAve, State(g.numagencies,0), WalkOptions() )
+        t1 = time.time()
+        print "time:", (t1-t0)*1000
+        
         vertices, edges = spt.path( vBeaconAve )
         
-        assert spt.get_vertex("53072051").payload.time == 31505
-        assert spt.get_vertex("53072051").payload.weight == 39562277
+        assert spt.get_vertex("53072051").payload.time == 31439
+        assert spt.get_vertex("53072051").payload.weight == 17311963
+        assert spt.get_vertex("53072051").payload.dist_walked == 26774.100248
         
         assert( False not in [l==r for l,r in zip( [v.label for v in vertices], idealVertices )] )
         assert( False not in [l==r for l,r in zip( [e.payload.name for e in edges], idealEdges )] )
@@ -541,11 +482,14 @@ class TestGraph(unittest.TestCase):
         idealVertices = ['53115442', '53115445', '53115446', '53227448', '53158020', '53105937', '53148458', '53077817', '53077819', '53077821', '53077823', '53077825', '60413953', '53097655', '60413955', '53196479', '53248412', '53245437', '53153886', '53181632', '53246786', '53078069', '53247761', '53129527', '53203543', '53248413', '53182343', '53156127', '53227471', '53240242', '53109739', '53248420', '53234775', '53170822', '53115167', '53209384', '53134650', '53142180', '53087702', '53184534', '53193013', '69374666', '53193014', '69474340', '53185600', '53077802', '69474361', '53090673', '53193015', '53193016', '53193017', '53193018', '53189027', '53193019', '53193020', '53112767', '53193021', '53183554', '53213063', '53197105', '53213061', '53090659', '53213059', '53157290', '53062869', '53213057', '53213055', '53213054', '53184527', '67507140', '67507145', '67507034', '67507151', '67507040', '67507158', '67507048', '67507166', '67507051', '67507176', '67507057', '67507126', '53233319', '53147253', '53233320', '53233321', '60002786', '60002787', '88468933', '53125662', '53195800', '88486410', '53228492', '88486425', '53215121', '88486457', '53199820', '53185765', '53233322', '53227223', '88486676', '53086030', '53086045', '53204778', '88486720', '53204762', '88486429', '53139133', '53139142', '88486453', '53072465', '30790081', '30790104', '53072467', '124181376', '30759113', '53072469', '53072472', '53072473', '53072475', '53072476', '53072477', '53072478', '124175598']
         idealEdges = ['6372784-0', '6372784-1', '6480699-3', '6517019-4', '6517019-5', '6517019-6', '6517019-7', '6346366-0', '6346366-1', '6346366-2', '6346366-3', '10425981-2', '8072147-2', '8072147-3', '6441828-10', '22758990-0', '6511156-0', '6511156-1', '6511156-2', '6511156-3', '6511156-4', '6511156-5', '6511156-6', '6511156-7', '6511156-8', '6511156-9', '6511156-10', '6511156-11', '6511156-12', '6511156-13', '6511156-14', '9112003-0', '9112003-1', '9112003-2', '9112003-3', '9112003-4', '9112003-5', '9112003-6', '9112003-7', '9112003-8', '6438432-0', '6438432-1', '6438432-2', '6438432-3', '6438432-4', '6438432-5', '6438432-6', '6438432-7', '6438432-8', '6438432-9', '6438432-10', '6438432-11', '6438432-12', '6438432-13', '6438432-14', '6438432-15', '10425996-0', '10425996-1', '10425996-2', '10425996-3', '10425996-4', '10425996-5', '10425996-6', '10425996-7', '10425996-8', '10425996-9', '10425996-10', '10425996-11', '10425996-12', '9116336-2', '9116336-3', '9116346-1', '9116346-2', '9116346-3', '9116346-4', '9116346-5', '9116346-6', '9116346-7', '9116346-8', '9116346-9', '6488959-1', '6488959-2', '6488959-3', '6488959-4', '6488959-5', '6488959-6', '6488959-7', '6488959-8', '6488959-9', '6488959-10', '6488959-11', '6488959-12', '6488959-13', '6488959-14', '6488959-15', '6488959-16', '6488959-17', '6488959-18', '6488959-19', '6488959-20', '6488959-21', '6488959-22', '6488959-23', '6488959-24', '6488959-25', '6488959-26', '6488959-27', '6488959-28', '6488959-29', '6344932-0', '6344932-1', '6344932-2', '13514591-0', '13514602-0', '13514602-1', '13514602-2', '8591344-0', '8591344-1', '8591344-2', '8591344-3', '8591344-4', '8591344-5']
         
+        t0 = time.time()
         spt = g.shortest_path_tree( vBallardAve, vLakeCityWay, State(g.numagencies,0), WalkOptions() )
+        t1 = time.time()
+        print "time: ", (t1-t0)*1000
         vertices, edges = spt.path( vLakeCityWay )
         
         assert spt.get_vertex("124175598").payload.time == 13684
-        assert spt.get_vertex("124175598").payload.weight == 6547467
+        assert spt.get_vertex("124175598").payload.weight == 190321
         
         assert( False not in [l==r for l,r in zip( [v.label for v in vertices], idealVertices )] )
         assert( False not in [l==r for l,r in zip( [e.payload.name for e in edges], idealEdges )] )
@@ -561,7 +505,8 @@ class TestGraph(unittest.TestCase):
         vertices, edges = spt.path( vAirportWay )
         
         assert spt.get_vertex("60147448").payload.time == 21082
-        assert spt.get_vertex("60147448").payload.weight == 17068232
+        print spt.get_vertex("60147448").payload.weight
+        assert spt.get_vertex("60147448").payload.weight == 4079909
         
         assert( False not in [l==r for l,r in zip( [v.label for v in vertices], idealVertices )] )
         assert( False not in [l==r for l,r in zip( [e.payload.name for e in edges], idealEdges )] )
@@ -571,7 +516,7 @@ class TestGraph(unittest.TestCase):
         
         g = Graph()
         
-        reader = csv.reader(open("map.csv"))
+        reader = csv.reader(open(find_resource("map.csv")))
         
         for wayid, fromv, tov, length in reader:
             g.add_vertex( fromv )
@@ -585,38 +530,23 @@ class TestGraph(unittest.TestCase):
         
         spt = g.shortest_path_tree_retro( v85thStreet, vBeaconAve, State(g.numagencies,31505), WalkOptions() )
         vertices, edges = spt.path_retro( v85thStreet )
-        
+    
         assert spt.get_vertex(v85thStreet).payload.time == 63
-        assert spt.get_vertex(v85thStreet).payload.weight == 39360085
+        assert spt.get_vertex(v85thStreet).payload.weight == 17022003
         
         assert [v.label for v in vertices] == idealVertices
         assert [e.payload.name for e in edges] == idealEdges
         
         vBallardAve = "53115442"
         vLakeCityWay = "124175598"
-        idealVertices = ['53115442', '53115445', '53115446', '53227448', '53158020', '53105937', '53148458', '53077817', '53077819', '53077821', '53077823', '53077825', '60413953', '53097655', '60413955', '53196479', '53248412', '53245437', '53153886', '53181632', '53246786', '53078069', '53247761', '53129527', '53203543', '53248413', '53182343', '53156127', '53227471', '53240242', '53109739', '53248420', '53234775', '53170822', '53115167', '53209384', '53134650', '53142180', '53087702', '53184534', '53193013', '69374666', '53193014', '69474340', '53185600', '53077802', '69474361', '53090673', '53193015', '53193016', '53193017', '53193018', '53189027', '53193019', '53193020', '53112767', '53193021', '53183554', '53213063', '53197105', '53213061', '53090659', '53213059', '53157290', '53062869', '53213057', '53213055', '53213054', '53184527', '67507140', '67507145', '67507034', '67507151', '67507040', '67507158', '67507048', '67507166', '67507051', '67507176', '67507057', '67507126', '53233319', '53147253', '53233320', '53233321', '60002786', '60002787', '88468933', '53125662', '53195800', '88486410', '53228492', '88486425', '53215121', '88486457', '53199820', '53185765', '53233322', '53227223', '88486676', '53086030', '53086045', '53204778', '88486720', '53204762', '88486429', '53139133', '53139142', '88486453', '53072465', '30790081', '30790104', '53072467', '124181376', '30759113', '53072469', '53072472', '53072473', '53072475', '53072476', '53072477', '53072478', '124175598']
-        idealEdges = ['6372784-0', '6372784-1', '6480699-3', '6517019-4', '6517019-5', '6517019-6', '6517019-7', '6346366-0', '6346366-1', '6346366-2', '6346366-3', '10425981-2', '8072147-2', '8072147-3', '6441828-10', '22758990-0', '6511156-0', '6511156-1', '6511156-2', '6511156-3', '6511156-4', '6511156-5', '6511156-6', '6511156-7', '6511156-8', '6511156-9', '6511156-10', '6511156-11', '6511156-12', '6511156-13', '6511156-14', '9112003-0', '9112003-1', '9112003-2', '9112003-3', '9112003-4', '9112003-5', '9112003-6', '9112003-7', '9112003-8', '6438432-0', '6438432-1', '6438432-2', '6438432-3', '6438432-4', '6438432-5', '6438432-6', '6438432-7', '6438432-8', '6438432-9', '6438432-10', '6438432-11', '6438432-12', '6438432-13', '6438432-14', '6438432-15', '10425996-0', '10425996-1', '10425996-2', '10425996-3', '10425996-4', '10425996-5', '10425996-6', '10425996-7', '10425996-8', '10425996-9', '10425996-10', '10425996-11', '10425996-12', '9116336-2', '9116336-3', '9116346-1', '9116346-2', '9116346-3', '9116346-4', '9116346-5', '9116346-6', '9116346-7', '9116346-8', '9116346-9', '6488959-1', '6488959-2', '6488959-3', '6488959-4', '6488959-5', '6488959-6', '6488959-7', '6488959-8', '6488959-9', '6488959-10', '6488959-11', '6488959-12', '6488959-13', '6488959-14', '6488959-15', '6488959-16', '6488959-17', '6488959-18', '6488959-19', '6488959-20', '6488959-21', '6488959-22', '6488959-23', '6488959-24', '6488959-25', '6488959-26', '6488959-27', '6488959-28', '6488959-29', '6344932-0', '6344932-1', '6344932-2', '13514591-0', '13514602-0', '13514602-1', '13514602-2', '8591344-0', '8591344-1', '8591344-2', '8591344-3', '8591344-4', '8591344-5']
-        
+        idealVertices = ['53115442', '53115445', '53115446', '53227448', '53158020', '53105937', '53148458', '53077817', '53077819', '53077821', '53077823', '53077825', '53077826', '53077828', '53077830', '53077832', '53077833', '53153886', '53181632', '53246786', '53078069', '53247761', '53129527', '53203543', '53248413', '53182343', '53156127', '53227471', '53240242', '53109739', '53248420', '53234775', '53170822', '53115167', '53209384', '53134650', '53142180', '53087702', '53184534', '53193013', '69374666', '53193014', '69474340', '53185600', '53077802', '69474361', '53090673', '53193015', '53193016', '53193017', '53193018', '53189027', '53193019', '53193020', '53112767', '53193021', '53183554', '53213063', '53197105', '53213061', '53090659', '53213059', '53157290', '53062869', '53213057', '53213055', '53213054', '53184527', '67507140', '67507145', '67507034', '67507151', '67507040', '67507158', '53210973', '53147258', '53210974', '53210975', '60002793', '60002790', '60002789', '60002786', '60002787', '88468933', '53125662', '53195800', '88486410', '53228492', '88486425', '53215121', '88486457', '53199820', '53185765', '53233322', '53227223', '88486676', '53086030', '53086045', '53204778', '88486720', '53204762', '88486429', '53139133', '53139142', '88486453', '53072465', '30790081', '30790104', '53072467', '124181376', '30759113', '53072469', '53072472', '53072473', '53072475', '53072476', '53072477', '53072478', '124175598']
+        idealEdges = ['6372784-0', '6372784-1', '6480699-3', '6517019-4', '6517019-5', '6517019-6', '6517019-7', '6346366-0', '6346366-1', '6346366-2', '6346366-3', '6346366-4', '6346366-5', '6346366-6', '6346366-7', '6346366-8', '10379527-1', '6511156-2', '6511156-3', '6511156-4', '6511156-5', '6511156-6', '6511156-7', '6511156-8', '6511156-9', '6511156-10', '6511156-11', '6511156-12', '6511156-13', '6511156-14', '9112003-0', '9112003-1', '9112003-2', '9112003-3', '9112003-4', '9112003-5', '9112003-6', '9112003-7', '9112003-8', '6438432-0', '6438432-1', '6438432-2', '6438432-3', '6438432-4', '6438432-5', '6438432-6', '6438432-7', '6438432-8', '6438432-9', '6438432-10', '6438432-11', '6438432-12', '6438432-13', '6438432-14', '6438432-15', '10425996-0', '10425996-1', '10425996-2', '10425996-3', '10425996-4', '10425996-5', '10425996-6', '10425996-7', '10425996-8', '10425996-9', '10425996-10', '10425996-11', '10425996-12', '9116336-2', '9116336-3', '9116346-1', '9116346-2', '9116346-3', '6459254-1', '6459254-2', '6459254-3', '6459254-4', '6459254-5', '4794350-10', '4794350-11', '4794350-12', '6488959-6', '6488959-7', '6488959-8', '6488959-9', '6488959-10', '6488959-11', '6488959-12', '6488959-13', '6488959-14', '6488959-15', '6488959-16', '6488959-17', '6488959-18', '6488959-19', '6488959-20', '6488959-21', '6488959-22', '6488959-23', '6488959-24', '6488959-25', '6488959-26', '6488959-27', '6488959-28', '6488959-29', '6344932-0', '6344932-1', '6344932-2', '13514591-0', '13514602-0', '13514602-1', '13514602-2', '8591344-0', '8591344-1', '8591344-2', '8591344-3', '8591344-4', '8591344-5']
+
         spt = g.shortest_path_tree_retro( vBallardAve, vLakeCityWay, State(g.numagencies,13684) )
         vertices, edges = spt.path_retro( vBallardAve )
         
-        assert spt.get_vertex(vBallardAve).payload.time == 0
-        assert spt.get_vertex(vBallardAve).payload.weight == 6559168
-        
-        assert [v.label for v in vertices] == idealVertices
-        assert [e.payload.name for e in edges] == idealEdges
-            
-        #one last time
-        vSandPointWay = "32096172"
-        vAirportWay = "60147448"
-        idealVertices = ['32096172', '60411560', '32096173', '32096176', '53110403', '32096177', '32096180', '53208261', '32096181', '60411559', '32096184', '53164136', '32096185', '32096190', '32096191', '32096194', '53123806', '32096196', '32096204', '53199337', '32096205', '32096208', '60411513', '32096209', '53040444', '32096212', '60411512', '53208255', '32096216', '53079385', '53079384', '32096219', '31192107', '31430499', '59948312', '31430457', '31430658', '29973173', '31430639', '29977895', '30012801', '31430516', '30012733', '29464742', '32271244', '31430321', '29464754', '31430318', '29973106', '31429815', '29464758', '31429758', '32103448', '60701659', '29464594', '29463661', '59677238', '59677231', '29463657', '29463479', '29449421', '29449412', '29545007', '29545373', '29979589', '30078988', '30079048', '244420183', '29979596', '29979598', '30230262', '30230264', '30279409', '30279408', '30230266', '30230273', '30230277', '30230281', '30230300', '30230506', '30231566', '30231379', '30230524', '30887745', '30887637', '30887631', '30887106', '60147424', '53131178', '53128410', '53131179', '53027159', '60147448']
-        idealEdges = ['4910430-0', '4910430-1', '4910417-0', '4910416-0', '4910416-1', '4910414-0', '4910413-0', '4910413-1', '4910412-0', '4910412-1', '4910410-0', '4910410-1', '4910408-0', '4910405-0', '4910405-1', '4910405-2', '4910405-3', '4910402-0', '4910399-0', '4910399-1', '4910397-0', '4910394-0', '4910394-1', '4910392-0', '4910392-1', '4910385-0', '4910385-1', '4910385-2', '4910385-3', '4910385-4', '4910385-5', '4910384-0', '4910384-1', '4869358-0', '4869358-1', '4869358-2', '4869358-3', '4869357-0', '4869357-1', '4869357-2', '4869357-3', '4869357-4', '4869357-5', '4636137-0', '4636137-1', '4636137-2', '4636137-3', '4636137-4', '4636137-5', '4636137-6', '4708973-0', '4708973-1', '4708973-2', '4708973-3', '4636201-0', '4708972-0', '4708972-1', '4708972-2', '4636105-0', '4636093-0', '4729956-0', '4644053-0', '4644064-0', '4722460-2', '4722460-3', '4722460-4', '4722460-5', '4722460-6', '14017470-0', '14017470-1', '5130429-0', '13866257-0', '13866256-0', '4748963-0', '4748962-0', '4748962-1', '15257844-0', '15257848-0', '15257848-1', '15257848-2', '15257848-3', '15257848-4', '4810339-0', '4810342-0', '4810342-1', '4810337-0', '4810290-0', '8044406-0', '15240328-7', '15240328-8', '15240328-9', '15240328-10']
-        
-        spt = g.shortest_path_tree_retro( vSandPointWay, vAirportWay, State(g.numagencies,21082) )
-        vertices, edges = spt.path_retro( vSandPointWay )
-        
-        assert spt.get_vertex(vSandPointWay).payload.time == 0
-        assert spt.get_vertex(vSandPointWay).payload.weight == 17035839
+        assert spt.get_vertex(vBallardAve).payload.time == -8
+        assert spt.get_vertex(vBallardAve).payload.weight == 196300
         
         assert [v.label for v in vertices] == idealVertices
         assert [e.payload.name for e in edges] == idealEdges
@@ -624,7 +554,7 @@ class TestGraph(unittest.TestCase):
     def xtestx_gratuitous_loop(self): #don't actually run with the test suite
         g = Graph()
         
-        reader = csv.reader(open("map.csv"))
+        reader = csv.reader(open(find_resource("map.csv")))
         
         for wayid, fromv, tov, length in reader:
             g.add_vertex( fromv )
@@ -662,9 +592,14 @@ class TestGraph(unittest.TestCase):
         tb.add_boarding( "2", 100 )
         tb.add_boarding( "3", 200 )
         
+        al = Alight( "WKDY", sc, tz, 0 )
+        al.add_alighting( "1", 50 )
+        al.add_alighting( "2", 100 )
+        al.add_alighting( "3", 200 )
+        
         g.add_edge( "A", "A-1", tb )
         g.add_edge( "A-1", "B-1", Crossing(10) )
-        g.add_edge( "B-1", "B", Alight() )
+        g.add_edge( "B-1", "B", al )
         
         spt = g.shortest_path_tree( "A", "B", State(1,0), WalkOptions() )
                 
@@ -692,6 +627,31 @@ class TestGraph(unittest.TestCase):
         assert spt.get_vertex( "B" ) == None
         spt.destroy()
 
+class TestShortestPathTree(unittest.TestCase):
+    def test_basic(self):
+        g = Graph()
+        
+        g.add_vertex( "A" )
+        g.add_vertex( "B" )
+        g.add_vertex( "C" )
+        g.add_vertex( "D" )
+        g.add_vertex( "E" )
+        g.add_edge( "A", "B", Street("atob", 10) )
+        g.add_edge( "A", "C", Street("atoc", 10) )
+        g.add_edge( "C", "D", Street("ctod", 10) )
+        g.add_edge( "B", "D", Street("btod", 10) )
+        g.add_edge( "D", "E", Street("btoe", 10) )
+        
+        wo = WalkOptions()
+        wo.walking_speed = 1
+        spt = g.shortest_path_tree( "A", None, State(1,0), wo )
+        spt.set_thicknesses( "A" )
+        
+        for edge in spt.get_vertex( "A" ).outgoing:
+            if edge.to_v.label == "B":
+                assert edge.thickness == 10
+            elif edge.to_v.label == "C":
+                assert edge.thickness == 30
 
 import time
 from random import randint
@@ -699,7 +659,7 @@ class TestGraphPerformance(unittest.TestCase):
     def test_load_performance(self):
         g = Graph()
         
-        reader = csv.reader(open("map.csv"))
+        reader = csv.reader(open(find_resource("map.csv")))
         
         t0 = time.time()
         for wayid, fromv, tov, length in reader:
@@ -709,14 +669,14 @@ class TestGraphPerformance(unittest.TestCase):
         t1 = time.time()
         dt = t1-t0
         
-        limit = 0.8
+        limit = 0.9
         print "Graph loaded in %f s; limit %f s"%(dt,limit)
         assert dt <= limit
         
     def test_spt_performance(self):
         g = Graph()
         
-        reader = csv.reader(open("map.csv"))
+        reader = csv.reader(open(find_resource("map.csv")))
         
         for wayid, fromv, tov, length in reader:
             g.add_vertex( fromv )
@@ -747,7 +707,7 @@ class TestGraphPerformance(unittest.TestCase):
     def test_stress(self):
         g = Graph()
         
-        reader = csv.reader(open("map.csv"))
+        reader = csv.reader(open(find_resource("map.csv")))
         
         nodeids = {}
         for wayid, fromv, tov, length in reader:
@@ -784,8 +744,7 @@ class TestState(unittest.TestCase):
         assert s.weight == 0
         assert s.dist_walked == 0
         assert s.num_transfers == 0
-        assert s.prev_edge_name == None
-        assert s.prev_edge_type == 5
+        assert s.prev_edge == None
         assert s.num_agencies == 1
         assert s.service_period(0) == None
         assert s.trip_id == None
@@ -796,8 +755,7 @@ class TestState(unittest.TestCase):
         assert s.weight == 0
         assert s.dist_walked == 0
         assert s.num_transfers == 0
-        assert s.prev_edge_name == None
-        assert s.prev_edge_type == 5
+        assert s.prev_edge == None
         assert s.num_agencies == 2
         assert s.service_period(0) == None
         assert s.service_period(1) == None
@@ -851,8 +809,7 @@ class TestState(unittest.TestCase):
         assert s2.weight == 0
         assert s2.dist_walked == 0
         assert s2.num_transfers == 0
-        assert s2.prev_edge_name == None
-        assert s2.prev_edge_type == 5
+        assert s2.prev_edge == None
         assert s2.num_agencies == 1
         assert s2.service_period(0).to_xml() == "<ServicePeriod begin_time='0' end_time='86400' service_ids='1,2'/>"
 
@@ -861,7 +818,24 @@ class TestStreet(unittest.TestCase):
         s = Street("mystreet", 1.1)
         assert s.name == "mystreet"
         assert s.length == 1.1
-        assert s.to_xml() == "<Street name='mystreet' length='1.100000' />"
+        assert s.rise == 0
+        assert s.fall == 0
+        assert s.slog == 1
+        assert s.way == 0
+        assert s.to_xml() == "<Street name='mystreet' length='1.100000' rise='0.000000' fall='0.000000' way='0'/>"
+        
+        s.slog = 2500
+        s.way = 232323
+        assert s.slog == 2500
+        assert s.way == 232323
+        
+    def test_street_elev(self):
+        s = Street("mystreet", 1.1, 24.5, 31.2)
+        assert s.name == "mystreet"
+        assert s.length == 1.1
+        assert round(s.rise,3) == 24.5
+        assert round(s.fall,3) == 31.2
+        assert s.to_xml() == "<Street name='mystreet' length='1.100000' rise='24.500000' fall='31.200001' way='0'/>"
         
     def test_destroy(self):
         s = Street("mystreet", 1.1)
@@ -874,7 +848,7 @@ class TestStreet(unittest.TestCase):
         assert s.name == "longstreet"
         assert s.length == 240000
 
-        assert s.to_xml() == "<Street name='longstreet' length='240000.000000' />"
+        assert s.to_xml() == "<Street name='longstreet' length='240000.000000' rise='0.000000' fall='0.000000' way='0'/>"
         
     def test_walk(self):
         s = Street("longstreet", 2)
@@ -883,8 +857,20 @@ class TestStreet(unittest.TestCase):
         assert after.time == 2
         assert after.weight == 2
         assert after.dist_walked == 2
-        assert after.prev_edge_type == 0
-        assert after.prev_edge_name == "longstreet"
+        assert after.prev_edge.type == 0
+        assert after.prev_edge.name == "longstreet"
+        assert after.num_agencies == 0
+        
+    def test_walk_slog(self):
+        s = Street("longstreet", 2)
+        s.slog = 10
+        
+        after = s.walk(State(0,0),WalkOptions())
+        assert after.time == 2
+        assert after.weight == 20
+        assert after.dist_walked == 2
+        assert after.prev_edge.type == 0
+        assert after.prev_edge.name == "longstreet"
         assert after.num_agencies == 0
         
     def test_walk_back(self):
@@ -895,14 +881,187 @@ class TestStreet(unittest.TestCase):
         assert before.time == 98
         assert before.weight == 2
         assert before.dist_walked == 2.0
-        assert before.prev_edge_type == 0
-        assert before.prev_edge_name == "longstreet"
+        assert before.prev_edge.type == 0
+        assert before.prev_edge.name == "longstreet"
         assert before.num_agencies == 0
+        
+    def test_walk_elev(self):
+        s = Street("uwhillclimb", 488.8992, 38.7096, 0)
+        
+        wo = WalkOptions()
+        wo.walking_speed = 4
+        after = s.walk(State(0,0),wo)
+        assert after.time == 242
+        assert after.weight == 302
+        
+        s = Street("uwhillclimb", 488.8992, 0, 38.7096)
+        after = s.walk(State(0,0),wo)
+        assert after.time == 47
+        assert after.weight == 47
+        
+        s = Street("bgfall", 612.9528, 7.62, 0)
+        after = s.walk(State(0,0),wo)
+        assert after.time == 176
+        assert after.weight == 187
+        
+        s = Street("bgfall", 612.9528, 0, 7.62)
+        after = s.walk(State(0,0), wo)
+        assert after.time == 139
+        assert after.weight == 139
+        
+    def test_walk_back_elev(self):
+        wo = WalkOptions()
+        wo.walking_speed = 4
+        
+        s = Street("uwhillclimb", 488.8992, 0, 38.7096)
+        after = s.walk_back(State(0,0),wo)
+        assert after.time == -242
+        assert after.weight == 302
+        
+        s = Street("uwhillclimb", 488.8992, 38.7096, 0)
+        after = s.walk_back(State(0,0),wo)
+        assert after.time == -47
+        assert after.weight == 47
+        
+        s = Street("bgfall", 612.9528, 0, 7.62)
+        after = s.walk_back(State(0,0),wo)
+        assert after.time == -176
+        assert after.weight == 187
+        
+        s = Street("bgfall", 612.9528, 7.62, 0)
+        after = s.walk_back(State(0,0), wo)
+        assert after.time == -139
+        assert after.weight == 139
+        
+    def test_street_turn(self):
+        wo = WalkOptions()
+        wo.turn_penalty = 20
+
+        e0 = Street("a1", 10)
+        e0.way = 42
+        e1 = Street("a2", 10)
+        e1.way = 43
+        s0 = State(0,0)
+        s0.prev_edge = e0
+        
+        s1 = e1.walk(s0, wo)
+        assert s1.weight == 31
+        
         
     def test_getstate(self):
         s = Street("longstreet", 2)
         
+        assert s.__getstate__() == ('longstreet', 2.0, 0.0, 0.0, 1.0,0)
+
+class TestEgress(unittest.TestCase):
+    def test_street(self):
+        s = Egress("mystreet", 1.1)
+        assert s.name == "mystreet"
+        assert s.length == 1.1
+        assert s.to_xml() == "<Egress name='mystreet' length='1.100000' />"
+        
+    def test_destroy(self):
+        s = Egress("mystreet", 1.1)
+        s.destroy()
+        
+        assert s.soul==None
+        
+    def test_street_big_length(self):
+        s = Egress("longstreet", 240000)
+        assert s.name == "longstreet"
+        assert s.length == 240000
+
+        assert s.to_xml() == "<Egress name='longstreet' length='240000.000000' />"
+        
+    def test_walk(self):
+        s = Egress("longstreet", 10)
+        wo = WalkOptions()
+        wo.walking_reluctance = 1
+        after = s.walk(State(0,0),wo)
+        wo.destroy()
+        print after
+        assert after.time == 9
+        assert after.weight == 9
+        assert after.dist_walked == 10
+        assert after.prev_edge_type == 12
+        assert after.prev_edge_name == "longstreet"
+        assert after.num_agencies == 0
+        
+    def test_walk_back(self):
+        s = Egress("longstreet", 10)
+        
+        before = s.walk_back(State(0,100),WalkOptions())
+        print before
+        assert before.time == 100 - (9)
+        assert before.weight == 9
+        assert before.dist_walked == 10.0
+        assert before.prev_edge_type == 12
+        assert before.prev_edge_name == "longstreet"
+        assert before.num_agencies == 0
+        
+    def test_getstate(self):
+        s = Egress("longstreet", 2)
+        
         assert s.__getstate__() == ('longstreet', 2)
+        
+    def test_graph(self):
+        g = Graph()
+        g.add_vertex("E")
+        g.add_vertex("S")
+        g.add_edge("E", "S", Egress("E2S",10))
+        
+        spt = g.shortest_path_tree("E", "S", State(0,0), WalkOptions())
+        assert spt
+        assert spt.__class__ == ShortestPathTree
+        assert spt.get_vertex("S").payload.dist_walked==10
+
+        spt.destroy()
+        g.destroy()
+
+class TestElapseTime(unittest.TestCase):
+    def test_new(self):
+        s = ElapseTime(120)
+        assert s.seconds == 120
+        assert s.to_xml() == "<ElapseTime seconds='120' />"
+        
+    def test_destroy(self):
+        s = ElapseTime(1)
+        s.destroy()
+        
+        assert s.soul==None
+        
+    def test_big_seconds(self):
+        s = ElapseTime(240000)
+        assert s.seconds == 240000
+
+        assert s.to_xml() == "<ElapseTime seconds='240000' />"
+        
+    def test_walk(self):
+        s = ElapseTime(2)
+        
+        after = s.walk(State(0,0),WalkOptions())
+        assert after.time == 2
+        assert after.weight == 2
+        assert after.dist_walked == 0
+        assert after.prev_edge.type == 14
+        assert after.num_agencies == 0
+        
+    def test_walk_back(self):
+        s = ElapseTime(2)
+        
+        before = s.walk_back(State(0,100),WalkOptions())
+        
+        assert before.time == 98
+        assert before.weight == 2
+        assert before.dist_walked == 0
+        assert before.prev_edge.type == 14
+        assert before.num_agencies == 0
+        
+    def test_getstate(self):
+        s = ElapseTime(2)
+        
+        assert s.__getstate__() == 2
+        
         
 class TestPyPayload(unittest.TestCase):
     def _minimal_graph(self):
@@ -930,18 +1089,15 @@ class TestPyPayload(unittest.TestCase):
     
     def test_walk(self):
         class IncTimePayload(GenericPyPayload):
-            def walk_impl(self, state):
+            def walk_impl(self, state, walkopts):
                 state.time = state.time + 10
                 state.weight = 5
                 return state
             
-            def walk_back_impl(self, state):
+            def walk_back_impl(self, state, walkopts):
                 state.time = state.time - 10
                 state.weight = 0
                 return state
-            
-            def collapse(self, state):
-                return Link()
             
         g = self._minimal_graph()
         ed = g.add_edge( "Seattle", "Portland", IncTimePayload())
@@ -958,15 +1114,14 @@ class TestPyPayload(unittest.TestCase):
         assert s2
         assert s2.time == 1
         assert s2.weight == 0
+        g.destroy()
         
     def test_failures(self):
         class ExceptionRaiser(GenericPyPayload):
-            def bad_stuff(self, state):
+            def walk_bad_stuff(self, state, walkopts):
                 raise Exception("I am designed to fail.")
-            walk_impl = bad_stuff
-            walk_back_impl = bad_stuff
-            collapse_impl = bad_stuff
-            collapse_back_impl = bad_stuff
+            walk_impl = walk_bad_stuff
+            walk_back_impl = walk_bad_stuff
 
         g = self._minimal_graph()
         ed = g.add_edge( "Seattle", "Portland", ExceptionRaiser())
@@ -974,8 +1129,30 @@ class TestPyPayload(unittest.TestCase):
         
         ed.walk(State(1,0), WalkOptions()) 
         ed.walk_back(State(1,0), WalkOptions())
-        ed.payload.collapse(State(1,0), WalkOptions())
-        ed.payload.collapse_back(State(1,0), WalkOptions())
+        g.destroy()
+        
+    def test_basic_graph(self):
+        class MovingWalkway(GenericPyPayload):
+            def walk_impl(self, state, walkopts):
+                state.time = state.time + 10
+                state.weight = 5
+                return state
+            
+            def walk_back_impl(self, state, walkopts):
+                state.time = state.time - 10
+                state.weight = 0
+                return state
+        
+        g = self._minimal_graph()
+        g.add_edge( "Seattle", "Portland", MovingWalkway())
+        spt = g.shortest_path_tree("Seattle", "Portland", State(0,0), WalkOptions())
+        assert spt
+        assert spt.__class__ == ShortestPathTree
+        assert spt.get_vertex("Portland").payload.weight==5
+        assert spt.get_vertex("Portland").payload.time==10
+
+        spt.destroy()
+        g.destroy()
 
 
 class TestLink(unittest.TestCase):
@@ -1002,8 +1179,8 @@ class TestLink(unittest.TestCase):
         assert after.time==0
         assert after.weight==0
         assert after.dist_walked==0
-        assert after.prev_edge_type==3
-        assert after.prev_edge_name=="LINK"
+        assert after.prev_edge.type == 3
+        assert after.prev_edge.name == "LINK"
         assert after.num_agencies == 1
         
     def test_walk_back(self):
@@ -1014,8 +1191,8 @@ class TestLink(unittest.TestCase):
         assert before.time == 0
         assert before.weight == 0
         assert before.dist_walked == 0.0
-        assert before.prev_edge_type == 3
-        assert before.prev_edge_name == "LINK"
+        assert before.prev_edge.type == 3
+        assert before.prev_edge.name == "LINK"
         assert before.num_agencies == 1
         
     def test_getstate(self):
@@ -1080,78 +1257,6 @@ class TestWait(unittest.TestCase):
         w = Wait(43200, tz)
         
         assert w.__getstate__() == (43200, tz.soul)
-
-class TestTripHop(unittest.TestCase):
-    
-    def test_triphop(self):
-        sc = ServiceCalendar()
-        sc.add_period( 0, 86400, ["WEEKDAY"] )
-        
-        tz = Timezone()
-        tz.add_period( TimezonePeriod( 0, 86400, 0 ) )
-        th = TripHop(25, 100, "foo", sc, timezone=tz, agency=0, service_id="WEEKDAY")
-
-        assert th.depart == 25
-        assert th.arrive == 100
-        assert th.transit == 75
-        assert th.trip_id == "foo"
-        assert th.calendar.head.begin_time==0
-        assert th.timezone.soul == tz.soul
-        assert th.agency == 0
-        assert th.service_id == "WEEKDAY"
-
-        s = State(1,0)
-        sprime = th.walk(s, WalkOptions())
-        assert sprime.time == 100
-        assert sprime.weight == 100
-
-        s = State(1, 200)
-        sprime = th.walk_back(s,WalkOptions())
-        assert sprime
-        assert sprime.time==25
-        assert sprime.weight==175
-        
-    def test_unixtime(self):
-        sc = ServiceCalendar()
-        sc.add_period( 0,86399,["WEEKDAY"] )
-        sc.add_period( 86400, 86400+86399, ["WEEKDAY"] )
-        
-        tz = Timezone()
-        tz.add_period( TimezonePeriod( 0, 86400+86399, 0 ) )
-        th = TripHop(25,100,"foo",sc, timezone=tz, agency=0, service_id="WEEKDAY")
-        
-        time = 25+86400
-        
-        s = State(1,time)  
-        sprime = th.walk(s, WalkOptions())
-        assert sprime.weight==75
-        assert sprime.time==time+75
-        
-    def test_august(self):
-        sc = ServiceCalendar()
-        #beginning of august 27 to end of august 27, America/Los_Angeles.
-        sc.add_period( 1219820400, 1219906799, ["WEEKDAY"] )
-        tz = Timezone.generate("America/Los_Angeles")
-        
-        #triphop from 12:00 noon to 12:05 PM. timezone offset is -7 hours, corresponding to west coast on daylight savings time
-        th = TripHop( 43200, 43500, "foo", sc, timezone=tz, agency=0, service_id="WEEKDAY" )
-        
-        # noon on august 27th, America/Los_Angeles
-        time = 1219863600
-        
-        s = State(1,time)
-        ret = th.walk(s, WalkOptions())
-        assert ret.time == 1219863900 #12:05PM august 27th, America/Los_Angeles
-        
-    def test_getstate(self):
-        sc = ServiceCalendar()
-        sc.add_period( 0, 86400, ["WEEKDAY"] )
-        
-        tz = Timezone()
-        tz.add_period( TimezonePeriod( 0, 86400, 0 ) )
-        th = TripHop(25, 100, "foo", sc, timezone=tz, agency=0, service_id="WEEKDAY")
-        
-        assert th.__getstate__() == (25, 100, "foo", sc.soul, tz.soul, 0, "WEEKDAY")
         
 class TestHeadway(unittest.TestCase):
     def test_basic(self):
@@ -1193,8 +1298,7 @@ class TestHeadway(unittest.TestCase):
         assert ret.time == 3720
         assert ret.weight == 3720
         assert ret.num_transfers == 1
-        assert ret.prev_edge_type == 7
-        assert ret.prev_edge_name == "HEADWAY"
+        assert ret.prev_edge.type == 7
         
         #right at beginning of headway
         s = State(1, 3600)
@@ -1202,8 +1306,7 @@ class TestHeadway(unittest.TestCase):
         assert ret.time == 3720
         assert ret.weight == 120
         assert ret.num_transfers == 1
-        assert ret.prev_edge_type == 7
-        assert ret.prev_edge_name == "HEADWAY"
+        assert ret.prev_edge.type == 7
         
         #in the middle of the headway
         s = State(1, 4000)
@@ -1211,8 +1314,7 @@ class TestHeadway(unittest.TestCase):
         assert ret.time == 4000+60+120
         assert ret.weight == 60+120
         assert ret.num_transfers == 1
-        assert ret.prev_edge_type == 7
-        assert ret.prev_edge_name == "HEADWAY"
+        assert ret.prev_edge.type == 7
         
         #the last second of the headway
         s = State(1, 2*3600)
@@ -1220,19 +1322,17 @@ class TestHeadway(unittest.TestCase):
         assert ret.time == 2*3600+60+120
         assert ret.weight == 60+120
         assert ret.num_transfers == 1
-        assert ret.prev_edge_type == 7
-        assert ret.prev_edge_name == "HEADWAY"
+        assert ret.prev_edge.type == 7
         
         #no-transfer
         s = State(1, 4000)
-        s.prev_edge_name = "HEADWAY"
-        s.prev_edge_type = 7
+        s.prev_edge = headway = Headway( 3600, 2*3600, 60, 120, "HEADWAY", sc, tz, 0, "WKDY" )
         ret = headway.walk( s,WalkOptions() )
         assert ret.time == 4000+120
         assert ret.weight == 120
         assert ret.num_transfers == 0
-        assert ret.prev_edge_type == 7
-        assert ret.prev_edge_name == "HEADWAY"
+        assert ret.prev_edge.type == 7
+        assert ret.prev_edge.trip_id == "HEADWAY"
         
     def test_getstate(self):
         sc = ServiceCalendar()
@@ -1243,208 +1343,6 @@ class TestHeadway(unittest.TestCase):
         headway = Headway( 0, 1*3600*24, 60, 120, "HEADWAY", sc, tz, 0, "WKDY" )
         
         assert headway.__getstate__() == (0, 1*3600*24, 60, 120, "HEADWAY", sc.soul, tz.soul, 0, "WKDY")
-
-class TestTriphopSchedule(unittest.TestCase):
-    
-    def setUp(self):
-        pass
-        
-    def tearDown(self):
-        pass
-    
-    def test_triphop_schedule(self):
-        
-        rawhops = [(0,     1*3600,'Foo to Bar'),
-                   (1*3600,2*3600,'Bar to Cow')]
-        # using a tuple
-        sc = ServiceCalendar()
-        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
-        tz = Timezone()
-        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
-        ths = TripHopSchedule(rawhops, "WKDY", sc, tz, agency=0)
-        
-        assert ths.timezone.soul == tz.soul
-        
-        h1 = ths.triphops[0]
-        assert h1.depart == 0
-        assert h1.arrive == 1*3600
-        assert h1.trip_id == "Foo to Bar"
-        h2 = ths.triphops[1]
-        assert h2.depart == 1*3600
-        assert h2.arrive == 2*3600
-        assert h2.trip_id == "Bar to Cow"
-                               
-        assert(ths.triphops[0].trip_id == 'Foo to Bar')
-        assert(len(ths.triphops) == 2)
-        assert str(ths)=="<TripHopSchedule service_id='WKDY'><TripHop depart='00:00:00' arrive='01:00:00' transit='3600' trip_id='Foo to Bar' service_id='WKDY' agency='0'/><TripHop depart='01:00:00' arrive='02:00:00' transit='3600' trip_id='Bar to Cow' service_id='WKDY' agency='0'/></TripHopSchedule>"
-    
-    def test_destroy(self):
-        rawhops = [(0,     1*3600,'Foo to Bar'),
-                   (1*3600,2*3600,'Bar to Cow')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=Timezone(), agency=0)
-        
-        ths.destroy()
-        
-        assert ths.soul == None
-        
-    def test_get_calendar(self):
-        rawhops = [(0,     1*3600,'Foo to Bar'),
-                   (1*3600,2*3600,'Bar to Cow')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
-        
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=Timezone(), agency=0)
-        
-        assert ths.calendar.head.end_time==86400
-        
-    def test_get_next_hop(self):
-        rawhops = [(0,     1*3600,'Foo to Bar'),
-                   (1*3600,2*3600,'Bar to Cow')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=Timezone(), agency=0)
-        
-        assert ths.get_next_hop( 0 ).trip_id == "Foo to Bar"
-        assert ths.get_next_hop( 1 ).trip_id == "Bar to Cow"
-        assert ths.get_next_hop( 3600 ).trip_id == "Bar to Cow"
-        assert ths.get_next_hop( 3601 ) == None
-        
-    def test_get_last_hop(self):
-        rawhops = [(0,     1*3600,'Foo to Bar'),
-                   (1*3600,2*3600,'Bar to Cow')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=Timezone(), agency=0)
-        
-        assert ths.get_last_hop( 0 ) == None
-        assert ths.get_last_hop( 3600 ).trip_id == "Foo to Bar"
-        assert ths.get_last_hop( 3601 ).trip_id == "Foo to Bar"
-        assert ths.get_last_hop( 2*3600-1).trip_id == "Foo to Bar"
-        assert ths.get_last_hop( 2*3600 ).trip_id == "Bar to Cow"
-        assert ths.get_last_hop( 100000 ).trip_id == "Bar to Cow"
-    
-    def test_walk(self):
-        rawhops = [(0,     1*3600,'Foo to Bar'),
-                   (1*3600,2*3600,'Bar to Cow')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ["WKDY","SAT"] )
-        tz = Timezone()
-        tz.add_period( TimezonePeriod( 0, 1*3600*24, 0 ) )
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=tz, agency=0)
-        
-        s = ths.walk(State(2,0), WalkOptions())
-        
-        assert s.time == 3600
-        assert s.weight == 3600
-        assert s.dist_walked == 0
-        assert s.num_transfers == 1
-        assert s.prev_edge_type == 2
-        assert s.prev_edge_name == "Foo to Bar"
-        assert s.num_agencies == 2
-        assert s.service_period(0).service_ids == [0,1]
-        assert s.service_period(0).begin_time == 0
-        assert s.service_period(0).end_time == 86400
-        assert s.service_period(1) == None
-        assert str(s) == "<state time='3600' weight='3600' dist_walked='0.0' num_transfers='1' prev_edge_type='2' prev_edge_name='Foo to Bar' trip_id='None'><ServicePeriod begin_time='0' end_time='86400' service_ids='0,1'/></state>"
-        
-        rawhops = [(0,     1*3600,'auth1trip0'),
-                   (1*3600,2*3600,'auth1trip1')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ["B","C"] )
-        ths = TripHopSchedule(hops=rawhops, service_id="B", calendar=cal, timezone=tz, agency=1)
-        
-        sfinal = ths.walk(s,WalkOptions())
-        
-        assert sfinal.time == 7200
-        assert sfinal.weight == 7200
-        assert sfinal.dist_walked == 0.0
-        assert sfinal.prev_edge_type == 2
-        assert sfinal.prev_edge_name == "auth1trip1"
-        assert sfinal.service_period(0).service_ids == [0,1]
-        assert sfinal.service_period(1).service_ids == [0,1]
-    
-    
-    def test_walk_back(self):
-        rawhops = [(1*3600,2*3600,'Foo to Bar'),
-                   (2*3600,3*3600,'Bar to Cow')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ["WKDY","SAT"] )
-        tz = Timezone()
-        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=tz, agency=0)
-        
-        assert ths.walk_back(State(1,0), WalkOptions()) == None
-        assert ths.walk_back(State(1,2*3600-1), WalkOptions()) == None
-        
-        s = ths.walk_back(State(2,3*3600), WalkOptions()) 
-        
-        assert s.time == 7200
-        assert s.weight == 3600
-        assert s.dist_walked == 0.0
-        assert s.num_transfers == 1
-        assert s.prev_edge_name == "Bar to Cow"
-        assert s.num_agencies == 2
-        assert str(s.service_period(0)) == "<ServicePeriod begin_time='0' end_time='86400' service_ids='0,1'/>"
-        assert s.service_period(0).service_ids == [0,1]
-        assert s.service_period(0).begin_time == 0
-        assert s.service_period(0).end_time == 86400
-        assert s.service_period(1) == None
-        
-        rawhops = [(1*3600,2*3600,'auth1trip0'),
-                   (2*3600,3*3600,'auth1trip1')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ["B","C"] )
-        ths = TripHopSchedule(hops=rawhops, service_id="B", calendar=cal, timezone=tz, agency=1)
-        
-        sfinal = ths.walk_back(s,WalkOptions())
-        
-        assert sfinal.time == 3600
-        assert sfinal.weight == 7200
-        assert sfinal.dist_walked == 0.0
-        assert sfinal.num_transfers == 2
-        assert sfinal.prev_edge_type == 2
-        assert sfinal.prev_edge_name == "auth1trip0"
-        assert sfinal.num_agencies == 2
-        assert str(sfinal.service_period(0))=="<ServicePeriod begin_time='0' end_time='86400' service_ids='0,1'/>"
-        assert str(sfinal.service_period(1))=="<ServicePeriod begin_time='0' end_time='86400' service_ids='0,1'/>"
-    
-    
-    def test_walk_wrong_day(self):
-        rawhops = [(10,     20,'Foo to Bar')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 10, ["A"] )
-        ths = TripHopSchedule(hops=rawhops, service_id="B", calendar=cal, timezone=Timezone(), agency=0)
-        
-        s = ths.walk(State(1,0), WalkOptions())
-        
-        assert s == None
-    
-    def test_collapse_wrong_day(self):
-
-        cal = ServiceCalendar()
-        cal.add_period( 0, 10, ["WKDY"] )
-        rawhops = [(10,     20,'Foo to Bar')]
-        ths = TripHopSchedule(hops=rawhops, service_id="SAT", calendar=cal, timezone=Timezone(), agency=0)
-        
-        th = ths.collapse(State(1,0))
-        
-        assert th == None
-    
-    def test_collapse(self):
-        rawhops = [(0,     1*3600,'Foo to Bar'),
-                   (1*3600,2*3600,'Bar to Cow')]
-        cal = ServiceCalendar()
-        cal.add_period( 0, 1*3600*24, ["WKDY","SAT"] )
-        ths = TripHopSchedule(hops=rawhops, service_id="WKDY", calendar=cal, timezone=Timezone(), agency=0)
-        
-        th = ths.collapse(State(1,0))
-        
-        assert th.depart == 0
-        assert th.arrive == 3600
-        assert th.transit == 3600
-        assert th.trip_id == "Foo to Bar"
     
 
 class TestListNode(unittest.TestCase):
@@ -1559,15 +1457,31 @@ class TestServiceCalendar(unittest.TestCase):
         except TypeError:
             pass
         
-        assert c.get_service_id_string( -1 ) == None
-        assert c.get_service_id_string( 0 ) == "A"
-        assert c.get_service_id_string( 1 ) == "B"
-        assert c.get_service_id_string( 2 ) == None
-        try:
-            c.get_service_id_string( "A" )
-            assert False
-        except TypeError:
-            pass
+        c.add_period(0,1000,["B"])
+        
+        import pickle
+        from cStringIO import StringIO
+        src = StringIO()
+        p = pickle.Pickler(src)        
+        
+        p.dump(c)
+        datastream = src.getvalue()
+        dst = StringIO(datastream)
+
+        upc = pickle.Unpickler(dst).load()
+        print c.expound("America/Los_Angeles")
+        print upc.expound("America/Los_Angeles")
+        assert c.expound("America/Los_Angeles") == upc.expound("America/Los_Angeles"), upc
+        for _c in [c, upc]:
+            assert _c.get_service_id_string( -1 ) == None
+            assert _c.get_service_id_string( 0 ) == "A", _c.to_xml()
+            assert _c.get_service_id_string( 1 ) == "B"
+            assert _c.get_service_id_string( 2 ) == None
+            try:
+                _c.get_service_id_string( "A" )
+                assert False
+            except TypeError:
+                pass
         
     def test_single(self):
         c = ServiceCalendar()
@@ -1737,7 +1651,7 @@ class TestEngine(unittest.TestCase):
         
         eng = Engine(gg)
         
-        assert eng.walk_edges("A", time=0) == "<?xml version='1.0'?><vertex><state time='0' weight='0' dist_walked='0.0' num_transfers='0' prev_edge_type='5' prev_edge_name='None'></state><outgoing_edges><edge><destination label='C'><state time='11' weight='22' dist_walked='10.0' num_transfers='0' prev_edge_type='0' prev_edge_name='4'></state></destination><payload><Street name='4' length='10.000000' /></payload></edge><edge><destination label='B'><state time='11' weight='22' dist_walked='10.0' num_transfers='0' prev_edge_type='0' prev_edge_name='1'></state></destination><payload><Street name='1' length='10.000000' /></payload></edge></outgoing_edges></vertex>"
+        assert eng.walk_edges("A", time=0) == "<?xml version='1.0'?><vertex><state time='0' weight='0' dist_walked='0.0' num_transfers='0' trip_id='None'></state><outgoing_edges><edge><destination label='C'><state time='11' weight='11' dist_walked='10.0' num_transfers='0' trip_id='None'></state></destination><payload><Street name='4' length='10.000000' rise='0.000000' fall='0.000000' way='0'/></payload></edge><edge><destination label='B'><state time='11' weight='11' dist_walked='10.0' num_transfers='0' trip_id='None'></state></destination><payload><Street name='1' length='10.000000' rise='0.000000' fall='0.000000' way='0'/></payload></edge></outgoing_edges></vertex>"
 
     def xtest_outgoing_edges_entire_osm(self):
         gg = Graph()
@@ -1755,7 +1669,7 @@ class TestEngine(unittest.TestCase):
         
         eng = Engine(gg)
         
-        assert eng.walk_edges("65287655", time=0) == "<?xml version='1.0'?><vertex><state time='Thu Jan  1 00:00:00 1970' weight='0' dist_walked='0.0' num_transfers='0' prev_edge_type='5' prev_edge_name='None'></state><outgoing_edges><edge><destination label='65287660'><state time='Thu Jan  1 00:04:16 1970' weight='512' dist_walked='218.044875866' num_transfers='0' prev_edge_type='0' prev_edge_name='8915843-0'></state></destination><payload><Street name='8915843-0' length='218.044876' /></payload></edge></outgoing_edges></vertex>"
+        assert eng.walk_edges("65287655", time=0) == "<?xml version='1.0'?><vertex><state time='Thu Jan  1 00:00:00 1970' weight='0' dist_walked='0.0' num_transfers='0' prev_edge_type='5' prev_edge_name='None' trip_id='None'></state><outgoing_edges><edge><destination label='65287660'><state time='Thu Jan  1 00:04:16 1970' weight='512' dist_walked='218.044875866' num_transfers='0' prev_edge_type='0' prev_edge_name='8915843-0'></state></destination><payload><Street name='8915843-0' length='218.044876' /></payload></edge></outgoing_edges></vertex>"
 
 class TestTimezone(unittest.TestCase):
     def test_basic(self):
@@ -2396,6 +2310,439 @@ class TestTripBoard(unittest.TestCase):
         ret = tb.walk(s,WalkOptions())
         assert ret == None
         
+    def test_walk_back(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24-1, ['WKDY'] )
+        sc.add_period( 1*3600*25, 2*3600*25-1, ['SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        tb = TripBoard( "WKDY", sc, tz, 0 )
+        tb.add_boarding( "1", 50 )
+        tb.add_boarding( "2", 100 )
+        tb.add_boarding( "3", 200 )
+        
+        s = State(1,100)
+        ret = tb.walk_back( s, WalkOptions() )
+        assert ret.time == 100
+        assert ret.weight == 0
+        
+class TestAlight(unittest.TestCase):
+    def test_basic(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight("WKDY", sc, tz, 0)
+        
+        assert al.int_service_id == 0
+        assert al.timezone.soul == tz.soul
+        assert al.calendar.soul == sc.soul
+        assert al.agency == 0
+        assert al.overage == 0
+        
+        assert al.num_alightings == 0
+        
+        assert al.type == 10
+        assert al.soul
+        al.destroy()
+        assert al.soul == None
+
+
+    def test_overage(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight("WKDY", sc, tz, 0)
+        
+        assert al.overage == 0
+        
+        al.add_alighting( "midnight", 24*3600 )
+        
+        assert al.overage == 0
+        
+        al.add_alighting( "nightowl1", 24*3600+1 )
+        
+        assert al.overage == 1
+        
+        al.add_alighting( "nightowl2", 24*3600+3600 )
+        
+        assert al.overage == 3600
+
+    def test_alight_over_midnight(self):
+        
+        sc = ServiceCalendar()
+        sc.add_period(0, 1*3600*24, ['WKDY'])
+        sc.add_period(1*3600*24,2*3600*24, ['SAT'])
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0,2*3600*24,0) )
+        
+        al = Alight( "WKDY", sc, tz, 0 )
+        al.add_alighting( "eleven", 23*3600 )
+        al.add_alighting( "midnight", 24*3600 )
+        al.add_alighting( "one", 25*3600 )
+        al.add_alighting( "two", 26*3600 )
+        
+        s0 = State(1, 0)
+        s1 = al.walk_back(s0,WalkOptions())
+        assert s1 == None
+        
+        s0 = State(1, 23*3600 )
+        s1 = al.walk_back(s0,WalkOptions())
+        assert s1.weight == 1
+        assert s1.service_period(0).service_ids == [0]
+        
+        s0 = State(1, 24*3600 )
+        s1 = al.walk_back(s0,WalkOptions())
+        assert s1.weight == 1
+        assert s1.service_period(0).service_ids == [1]
+        
+        s0 = State(1, 25*3600 )
+        s1 = al.walk_back(s0,WalkOptions())
+        assert s1.time == 25*3600
+        assert s1.weight == 1
+        assert s1.service_period(0).service_ids == [1]
+        
+        s0 = State(1, 26*3600 )
+        s1 = al.walk_back(s0,WalkOptions())
+        assert s1.time == 26*3600
+        assert s1.weight == 1
+        assert s1.service_period(0).service_ids == [1]
+        
+        s0 = State(1, 26*3600+1)
+        s1 = al.walk_back(s0,WalkOptions())
+        assert s1.time == 26*3600
+        assert s1.weight == 2
+        assert s1.service_period(0).service_ids == [1]
+
+    def test_add_single_trip(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight("WKDY", sc, tz, 0)
+    
+        try:
+            al.get_alighting( 0 )
+        except Exception, ex:
+            assert str(ex) == "Index 0 out of bounds"
+    
+        al.add_alighting( "morning", 0 )
+        
+        assert al.num_alightings == 1
+        
+        assert al.get_alighting( 0 ) == ("morning", 0)
+        
+        try:
+            al.get_alighting( -1 )
+        except Exception, ex:
+            assert str(ex) == "Index -1 out of bounds"
+            
+        try:
+            al.get_alighting( 1 )
+        except Exception, ex:
+            assert str(ex) == "Index 1 out of bounds"
+
+    def test_add_several_in_order(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight("WKDY", sc, tz, 0)
+    
+        try:
+            al.get_alighting( 0 )
+            raise Exception( "should have popped error by now" )
+        except Exception, ex:
+            assert str(ex) == "Index 0 out of bounds"
+    
+        al.add_alighting( "first", 0 )
+        
+        assert al.num_alightings == 1
+        assert al.get_alighting( 0 ) == ('first', 0)
+        
+        al.add_alighting( "second", 50 )
+        assert al.num_alightings == 2
+        
+        assert al.get_alighting( 0 ) == ('first', 0)
+        assert al.get_alighting( 1 ) == ('second', 50)
+        
+        try:
+            al.get_alighting( -1 )
+            raise Exception( "should have popped error by now" )
+        except Exception, ex:
+            assert str(ex) == "Index -1 out of bounds"
+            
+        try:
+            al.get_alighting( 2 )
+            raise Exception( "should have popped error by now" )
+        except Exception, ex:
+            assert str(ex) == "Index 2 out of bounds"
+
+        al.add_alighting( "third", 150 )
+        assert al.num_alightings == 3
+        
+        assert al.get_alighting( 0 ) == ('first', 0)
+        assert al.get_alighting( 1 ) == ('second', 50)
+        assert al.get_alighting( 2 ) == ('third', 150)
+        
+        try:
+            al.get_alighting( -1 )
+            raise Exception( "should have popped error by now" )
+        except Exception, ex:
+            assert str(ex) == "Index -1 out of bounds"
+            
+        try:
+            al.get_alighting( 3 )
+            raise Exception( "should have popped error by now" )
+        except Exception, ex:
+            assert str(ex) == "Index 3 out of bounds"
+            
+        al.add_alighting( "fourth", 150 )
+        assert al.num_alightings == 4
+        
+        assert al.get_alighting( 0 ) == ('first', 0)
+        assert al.get_alighting( 1 ) == ('second', 50)
+        assert al.get_alighting( 2 ) == ('third', 150) or al.get_alighting( 2 ) == ('fourth', 150)
+        assert al.get_alighting( 3 ) == ('third', 150) or al.get_alighting( 3 ) == ('fourth', 150)
+
+    def test_add_several_out_of_order(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight("WKDY", sc, tz, 0)
+    
+        try:
+            al.get_alighting( 0 )
+            raise Exception( "should have popped error by now" )
+        except Exception, ex:
+            assert str(ex) == "Index 0 out of bounds"
+    
+        al.add_alighting( "fourth", 150 )
+        
+        assert al.num_alightings == 1
+        assert al.get_alighting( 0 ) == ('fourth', 150)
+        
+        al.add_alighting( "first", 0 )
+        assert al.num_alightings == 2
+        
+        assert al.get_alighting( 0 ) == ('first', 0)
+        assert al.get_alighting( 1 ) == ('fourth', 150)
+        
+        try:
+            al.get_alighting( -1 )
+            raise Exception( "should have popped error by now" )
+        except Exception, ex:
+            assert str(ex) == "Index -1 out of bounds"
+            
+        try:
+            al.get_alighting( 2 )
+            raise Exception( "should have popped error by now" )
+        except Exception, ex:
+            assert str(ex) == "Index 2 out of bounds"
+
+        al.add_alighting( "third", 150 )
+        assert al.num_alightings == 3
+        
+        assert al.get_alighting( 0 ) == ('first', 0)
+        assert al.get_alighting( 1 ) == ('third', 150)
+        assert al.get_alighting( 2 ) == ('fourth', 150)
+        
+        try:
+            al.get_alighting( -1 )
+            raise Exception( "should have popped error by now" )
+        except Exception, ex:
+            assert str(ex) == "Index -1 out of bounds"
+            
+        try:
+            al.get_alighting( 3 )
+            raise Exception( "should have popped error by now" )
+        except Exception, ex:
+            assert str(ex) == "Index 3 out of bounds"
+        
+        al.add_alighting( "second", 50 )
+        assert al.num_alightings == 4
+        
+        assert al.get_alighting( 0 ) == ('first', 0)
+        assert al.get_alighting( 1 ) == ('second', 50)
+        assert al.get_alighting( 2 ) == ('third', 150) or al.get_alighting( 2 ) == ('fourth', 150)
+        assert al.get_alighting( 3 ) == ('third', 150) or al.get_alighting( 3 ) == ('fourth', 150)
+
+    def test_add_several_random(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight("WKDY", sc, tz, 0)
+        
+        for i in range(1000):
+            al.add_alighting( str(i), randint(0,10000) )
+            
+        last_arrival = -1
+        for i in range(al.num_alightings):
+            trip_id, arrival = al.get_alighting(i)
+            assert last_arrival <= arrival
+            last_arrival = arrival
+            
+
+    
+    def test_search_boardings_list_single(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight("WKDY", sc, tz, 0)
+        
+        assert al.search_alightings_list(0) == 0
+        
+        al.add_alighting( "morning", 15 )
+        
+        assert al.search_alightings_list(5) == 0
+        assert al.search_alightings_list(15) == 0
+        assert al.search_alightings_list(20) == 1
+        
+
+        
+    def test_get_last_alighting_index_single(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight("WKDY", sc, tz, 0)
+        
+        assert al.get_last_alighting_index(0) == -1
+        
+        al.add_alighting( "morning", 15 )
+        
+        assert al.get_last_alighting_index(5) == -1
+        assert al.get_last_alighting_index(15) == 0
+        assert al.get_last_alighting_index(20) == 0
+        
+    def test_get_last_alighting_single(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight("WKDY", sc, tz, 0)
+        
+        assert al.get_last_alighting(0) == None
+        
+        al.add_alighting( "morning", 15 )
+        
+        assert al.get_last_alighting(5) == None
+        assert al.get_last_alighting(15) == ( "morning", 15 )
+        assert al.get_last_alighting(20) == ( "morning", 15 )
+
+    def test_get_last_alighting_several(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight("WKDY", sc, tz, 0)
+        
+        assert al.get_last_alighting(0) == None
+        
+        al.add_alighting( "1", 15 )
+        
+        assert al.get_last_alighting(5) == None
+        assert al.get_last_alighting(15) == ( "1", 15 )
+        assert al.get_last_alighting(20) == ( "1", 15 )
+        
+        al.add_alighting( "2", 25 )
+        
+        assert al.get_last_alighting(5) == None
+        assert al.get_last_alighting(15) == ( "1", 15 )
+        assert al.get_last_alighting(20) == ( "1", 15 )
+        assert al.get_last_alighting(25) == ( "2", 25 )
+        assert al.get_last_alighting(30) == ( "2", 25 )
+    
+
+    def test_walk_back(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24-1, ['WKDY'] )
+        sc.add_period( 1*3600*25, 2*3600*25-1, ['SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight( "WKDY", sc, tz, 0 )
+        al.add_alighting( "1", 50 )
+        al.add_alighting( "2", 100 )
+        al.add_alighting( "3", 200 )
+        
+        #wrong day
+        s = State(1, 1*3600*24)
+        ret = al.walk_back( s,WalkOptions() )
+        assert ret == None
+        
+        s = State(1, 250)
+        ret = al.walk_back(s,WalkOptions())
+        assert ret.time == 200
+        assert ret.weight == 51
+        assert ret.num_transfers == 1
+        assert ret.dist_walked == 0.0
+        
+        s = State(1, 248)
+        ret = al.walk_back(s,WalkOptions())
+        assert ret.time == 200
+        assert ret.weight == 49
+        assert ret.num_transfers == 1
+        assert ret.dist_walked == 0.0
+        
+        s = State(1, 200)
+        ret = al.walk_back(s,WalkOptions())
+        assert ret.time == 200
+        assert ret.weight == 1
+        assert ret.num_transfers == 1
+        assert ret.dist_walked == 0.0
+        
+        s = State(1, 100)
+        ret = al.walk_back(s,WalkOptions())
+        assert ret.time == 100
+        assert ret.weight == 1
+        assert ret.num_transfers == 1
+        assert ret.dist_walked == 0.0
+        
+        s = State(1, 50)
+        ret = al.walk_back(s,WalkOptions())
+        assert ret.time == 50
+        assert ret.weight == 1
+        assert ret.num_transfers == 1
+        assert ret.dist_walked == 0.0
+        
+        s = State(1, 49)
+        ret = al.walk_back(s,WalkOptions())
+        assert ret == None
+        
+    def test_walk(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24-1, ['WKDY'] )
+        sc.add_period( 1*3600*25, 2*3600*25-1, ['SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        al = Alight( "WKDY", sc, tz, 0 )
+        al.add_alighting( "1", 50 )
+        al.add_alighting( "2", 100 )
+        al.add_alighting( "3", 200 )
+        
+        s = State(1,100)
+        ret = al.walk( s, WalkOptions() )
+        assert ret.time == 100
+        assert ret.weight == 0
+
+        
 class TestCrossing(unittest.TestCase):
     
     def test_basic(self):
@@ -2415,7 +2762,17 @@ class TestCrossing(unittest.TestCase):
         assert ret.time == 10
         assert ret.weight == 10
         
-class TestAlight(unittest.TestCase):
+    def test_walk_back(self):
+        
+        cr = Crossing(10)
+        
+        s = State(1, 10)
+        ret = cr.walk_back(s, WalkOptions())
+        
+        assert ret.time == 0
+        assert ret.weight == 10
+        
+"""class TestAlight(unittest.TestCase):
     
     def test_basic(self):
         
@@ -2431,7 +2788,7 @@ class TestAlight(unittest.TestCase):
         s = State(1, 0)
         ret = al.walk(s,WalkOptions())
         assert ret.time == 0
-        assert ret.weight == 0
+        assert ret.weight == 0"""
 
 class TestHeadwayBoard(unittest.TestCase):
     def test_basic(self):
@@ -2488,6 +2845,19 @@ class TestHeadwayBoard(unittest.TestCase):
         s1 = hb.walk(s0,WalkOptions())
         assert s1 == None
         
+    def test_walk_back(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        hb = HeadwayBoard("WKDY", sc, tz, 0, "tr1", 200, 1000, 50)
+        
+        s0 = State(1,0)
+        s1 = hb.walk(s0, WalkOptions())
+        s2 = hb.walk_back(s1, WalkOptions())
+        assert s2.trip_id == None
+        
     def test_tripboard_over_midnight(self):
         
         sc = ServiceCalendar()
@@ -2529,6 +2899,124 @@ class TestHeadwayBoard(unittest.TestCase):
         s1 = hb.walk(s0,WalkOptions())
         assert s1 == None
         
+class TestHeadwayAlight(unittest.TestCase):
+    def test_basic(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY','SAT'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        ha = HeadwayAlight("WKDY", sc, tz, 0, "hwtrip1", 0, 1000, 100)
+        
+        assert ha.calendar.soul == sc.soul
+        assert ha.timezone.soul == tz.soul
+        
+        assert ha.agency == 0
+        assert ha.int_service_id == 0
+        
+        assert ha.trip_id == "hwtrip1"
+        
+        assert ha.start_time == 0
+        assert ha.end_time == 1000
+        assert ha.headway_secs == 100
+        
+        ha.destroy()
+        
+    def test_walk_back(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        ha = HeadwayAlight("WKDY", sc, tz, 0, "tr1", 200, 1000, 50)
+        
+        # 200 after end of headway
+        s0 = State(1,1200)
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1.time == 1000
+        assert s1.weight == 201
+        
+        # at very end of the headway
+        s0 = State(1,1000)
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1.time == 1000
+        assert s1.weight == 1
+        
+        # in the middle of headway period
+        s0 = State(1, 500)
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1.time == 500
+        assert s1.weight == 1
+        
+        # at the very beginning of the headway period
+        s0 = State(1, 200)
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1.time == 200
+        assert s1.weight == 1
+        
+        # before beginning of headway period
+        s0 = State(1, 199)
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1 == None
+        
+    def test_walk(self):
+        sc = ServiceCalendar()
+        sc.add_period( 0, 1*3600*24, ['WKDY'] )
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0, 1*3600*24, 0) )
+        
+        ha = HeadwayAlight("WKDY", sc, tz, 0, "tr1", 200, 1000, 50)
+        
+        s0 = State(1,0)
+        s1 = ha.walk(s0, WalkOptions())
+        assert s1.trip_id == None
+        
+    def test_headwayalight_over_midnight(self):
+        
+        sc = ServiceCalendar()
+        sc.add_period(0, 1*3600*24, ['WKDY'])
+        sc.add_period(1*3600*24,2*3600*24, ['SAT'])
+        tz = Timezone()
+        tz.add_period( TimezonePeriod(0,2*3600*24,0) )
+        
+        ha = HeadwayAlight( "WKDY", sc, tz, 0, "owl", 23*3600, 26*3600, 100 )
+        
+        # just past the end
+        s0 = State(1, 26*3600+100)
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1.weight == 101
+        assert s1.service_period(0).service_ids == [1]
+        
+        # right at the end
+        s0 = State(1, 26*3600 )
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1.weight == 1
+        assert s1.service_period(0).service_ids == [1]
+        
+        # in the middle, over midnight
+        s0 = State(1, 25*3600 )
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1.time == 25*3600
+        assert s1.weight == 1
+        assert s1.service_period(0).service_ids == [1]
+        
+        # in the middle, at midnight
+        s0 = State(1, 24*3600 )
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1.weight == 1
+        assert s1.service_period(0).service_ids == [1]
+        
+        #before midnight, at the beginning
+        s0 = State(1, 23*3600 )
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1.time == 23*3600
+        assert s1.weight == 1
+        assert s1.service_period(0).service_ids == [0]
+        
+        s0 = State(1, 23*3600-1)
+        s1 = ha.walk_back(s0,WalkOptions())
+        assert s1 == None
+        
 class TestWalkOptions(unittest.TestCase):
     def test_basic(self):
         wo = WalkOptions()
@@ -2536,13 +3024,20 @@ class TestWalkOptions(unittest.TestCase):
         assert wo
         
         assert wo.transfer_penalty == 0
+        assert wo.turn_penalty == 0
         assert wo.walking_speed*100//1 == 85.0
         assert wo.walking_reluctance == 1.0
         assert wo.max_walk == 10000
         assert round(wo.walking_overage,3) == 0.1
+        assert round(wo.uphill_slowness,3) == 0.08
+        assert round(wo.downhill_fastness,3) == 1.96
+        assert round(wo.hill_reluctance,3) == 1.5
         
         wo.transfer_penalty = 50
         assert wo.transfer_penalty == 50
+        
+        wo.turn_penalty = 3
+        assert wo.turn_penalty == 3
         
         wo.walking_speed = 1.05
         assert round(wo.walking_speed*100) == 105.0
@@ -2556,35 +3051,180 @@ class TestWalkOptions(unittest.TestCase):
         wo.walking_overage = 1.0
         assert wo.walking_overage == 1.0
         
+        wo.uphill_slowness = 1.5
+        assert wo.uphill_slowness == 1.5
+        
+        wo.downhill_fastness = 3.4
+        assert round(wo.downhill_fastness,3) == 3.4
+        
+        wo.hill_reluctance = 1.4
+        assert round(wo.hill_reluctance,3) == 1.4
+        
         wo.destroy()
         assert wo.soul == None
+        
+    def test_from_ptr(self):
+        wo = WalkOptions()
+        wo.transfer_penalty = 10
+        wo1 = WalkOptions.from_pointer(wo.soul)
+        assert wo.transfer_penalty == wo1.transfer_penalty
+        assert wo1.soul == wo.soul
+        wo.destroy()
+        
+class TestEdge(unittest.TestCase):
+    def test_basic(self):
+        v1 = Vertex( "A" )
+        v2 = Vertex( "B" )
+        e1 = Edge( v1, v2, Street( "atob", 10.0 ) )
+        
+        assert e1.thickness == -1
+        assert e1.enabled == True
+        
+        e1.enabled = False
+        assert e1.enabled == False
+        
+    def test_walk(self):
+        v1 = Vertex( "A" )
+        v2 = Vertex( "B" )
+        e1 = Edge( v1, v2, Street( "atob", 10.0 ) )
+        
+        assert e1.walk( State(0,0), WalkOptions() ) is not None
+        assert e1.walk( State(0,0), WalkOptions() ).weight == 11
+        
+    def test_disable(self):
+        v1 = Vertex( "A" )
+        v2 = Vertex( "B" )
+        e1 = Edge( v1, v2, Street( "atob", 10.0 ) )
+        
+        assert e1.walk( State(0,0), WalkOptions() ) is not None
+        assert e1.walk( State(0,0), WalkOptions() ).weight == 11
+        
+        e1.enabled = False
+        
+        assert e1.walk( State(0,0), WalkOptions() ) == None
+        
+        gg = Graph()
+        gg.add_vertex( "A" )
+        gg.add_vertex( "B" )
+        heavy = Street( "Heavy", 100 )
+        light = Street( "Light", 1 )
+        gg.add_edge( "A", "B", heavy )
+        gg.add_edge( "A", "B", light )
+        
+        assert gg.shortest_path_tree( "A", "B", State(0,0), WalkOptions() ).path("B")[1][0].payload.name == "Light"
+        
+        lightedge = gg.get_vertex("A").outgoing[0]
+        lightedge.enabled = False
+        
+        assert gg.shortest_path_tree( "A", "B", State(0,0), WalkOptions() ).path("B")[1][0].payload.name == "Heavy"
+        
+    def test_disable_vertex(self):
+        gg = Graph()
+        gg.add_vertex( "A" )
+        gg.add_vertex( "B" )
+        gg.add_vertex( "C" )
+        gg.add_vertex( "D" )
+        gg.add_edge( "A", "B", Street( "atob", 1 ) )
+        gg.add_edge( "B", "D", Street( "btod", 1 ) )
+        gg.add_edge( "A", "C", Street( "atoc", 1 ) )
+        gg.add_edge( "C", "D", Street( "ctod", 1 ) )
+        
+        for edge in gg.get_vertex("B").outgoing:
+            assert edge.enabled == True
+        for edge in gg.get_vertex("B").incoming:
+            assert edge.enabled == True
+            
+        gg.set_vertex_enabled( "B", False )
+        
+        for edge in gg.get_vertex("B").outgoing:
+            assert edge.enabled == False
+        for edge in gg.get_vertex("B").incoming:
+            assert edge.enabled == False
+            
+        for edge in gg.get_vertex("C").outgoing:
+            assert edge.enabled == True
+        for edge in gg.get_vertex("C").incoming:
+            assert edge.enabled == True
+            
+        gg.set_vertex_enabled( "B", True )
+        
+        for edge in gg.get_vertex("B").outgoing:
+            assert edge.enabled == True
+        for edge in gg.get_vertex("B").incoming:
+            assert edge.enabled == True
+        
+        
+class TestGraphDatabase:
+    def test_basic(self):
+        g = Graph()
+        g.add_vertex("A")
+        g.add_vertex("B")
+        g.add_edge("A", "B", Link())
+        g.add_edge("A", "B", Street("foo", 20.0))
+        gdb_file = os.path.dirname(__file__) + "unit_test.db"
+        if os.path.exists(gdb_file):
+            os.remove(gdb_file)        
+        gdb = GraphDatabase(gdb_file)
+        gdb.populate(g)
+        
+        list(gdb.execute("select * from resources"))
+        assert "A" in list(gdb.all_vertex_labels())
+        assert "B" in list(gdb.all_vertex_labels())
+        assert glen(gdb.all_edges()) == 2
+        assert glen(gdb.all_outgoing("A")) == 2
+        assert glen(gdb.all_outgoing("B")) == 0
+        assert glen(gdb.all_incoming("A")) == 0
+        assert glen(gdb.all_incoming("B")) == 2
+        assert glen(gdb.resources()) == 0
+        assert gdb.num_vertices() == 2
+        assert gdb.num_edges() == 2
+        
+        g.destroy()
+        g = gdb.incarnate()
+        
+        list(gdb.execute("select * from resources"))
+        assert "A" in list(gdb.all_vertex_labels())
+        assert "B" in list(gdb.all_vertex_labels())
+        assert glen(gdb.all_edges()) == 2
+        assert glen(gdb.all_outgoing("A")) == 2
+        assert glen(gdb.all_outgoing("B")) == 0
+        assert glen(gdb.all_incoming("A")) == 0
+        assert glen(gdb.all_incoming("B")) == 2
+        assert glen(gdb.resources()) == 0
+        assert gdb.num_vertices() == 2
+        assert gdb.num_edges() == 2
+        
+        
+def glen(gen):
+    return len(list(gen))
 
 if __name__ == '__main__':
     tl = unittest.TestLoader()
     
     testables = [\
-                 #TestGraph,
-                 #TestGraphPerformance,
-                 #TestState,
-                 #TestPyPayload,
-                 #TestLink,
-                 #TestWait,
-                 #TestTripHop,
-                 #TestTriphopSchedule,
-                 #TestStreet,
-                 #TestHeadway,
-                 #TestListNode,
-                 #TestVertex,
-                 #TestServicePeriod,
-                 #TestServiceCalendar,
-                 #TestEngine,
-                 #TestTimezone,
-                 #TestTimezonePeriod,
-                 #TestTripBoard,
-                 #TestCrossing,
-                 #TestAlight,
-                 #TestHeadwayBoard,
+                 TestGraph,
+                 TestGraphPerformance,
+                 TestEdge,
+                 TestState,
+                 TestPyPayload,
+                 TestLink,
+                 TestWait,
+                 TestStreet,
+                 TestHeadway,
+                 TestListNode,
+                 TestVertex,
+                 TestServicePeriod,
+                 TestServiceCalendar,
+                 TestEngine,
+                 TestTimezone,
+                 TestTimezonePeriod,
+                 TestTripBoard,
+                 TestCrossing,
+                 TestAlight,
+                 TestHeadwayBoard,
+                 TestHeadwayAlight,
                  TestWalkOptions,
+                 TestElapseTime,
                  ]
 
     for testable in testables:

@@ -10,11 +10,11 @@ class GraphDatabase:
     
     def __init__(self, sqlite_filename, overwrite=False):
         if overwrite:
-            try:
+            if os.path.exists(sqlite_filename):
                 os.remove( sqlite_filename )
-            except OSError:
-                pass
-            
+        elif not os.path.exists(sqlite_filename):
+            overwrite = True # force an init of the tables
+                
         self.conn = sqlite3.connect(sqlite_filename)
         
         if overwrite:
@@ -24,7 +24,7 @@ class GraphDatabase:
         
     def setup(self):
         c = self.conn.cursor()
-        c.execute( "CREATE TABLE vertices (label)" )
+        c.execute( "CREATE TABLE vertices (label TEXT UNIQUE ON CONFLICT IGNORE)" )
         c.execute( "CREATE TABLE edges (vertex1 TEXT, vertex2 TEXT, edgetype TEXT, edgestate TEXT)" )
         c.execute( "CREATE TABLE resources (name TEXT UNIQUE ON CONFLICT IGNORE, image TEXT)" )
     
@@ -50,6 +50,33 @@ class GraphDatabase:
         c.close()
         
         self.index()
+        
+    def get_cursor(self):
+        return self.conn.cursor()
+    def commit(self):
+        self.conn.commit()
+        
+    def add_vertex(self, vertex_label, outside_c=None):
+        c = outside_c or self.conn.cursor()
+        
+        c.execute( "INSERT INTO vertices VALUES (?)", (vertex_label,) )
+        
+        if outside_c is None:
+            self.conn.commit()
+            c.close()
+        
+    def add_edge(self, from_v_label, to_v_label, payload, outside_c=None):
+        c = outside_c or self.conn.cursor()
+            
+        c.execute( "INSERT INTO edges VALUES (?, ?, ?, ?)", (from_v_label, to_v_label, cPickle.dumps( payload.__class__ ), cPickle.dumps( payload.__getstate__() ) ) )
+        
+        if hasattr(payload, "__resources__"):
+            for name, resource in payload.__resources__():
+                self.store( name, resource )
+                
+        if outside_c is None:
+            self.conn.commit()
+            c.close()
         
     def execute(self, query, args=None):
         
@@ -123,26 +150,33 @@ class GraphDatabase:
     def num_edges(self):
         return list(self.execute( "SELECT count(*) from edges" ))[0][0]
         
-    def incarnate(self):
+    def incarnate(self, reporter=sys.stdout):
         g = Graph()
         num_vertices = self.num_vertices()
+        
         for i, vertex_label in enumerate( self.all_vertex_labels() ):
-            if i%5000==0: print( "%d/%d vertices"%(i,num_vertices) ); sys.stdout.flush()
+            if reporter and i%5000==0: 
+                reporter.write("\r%d/%d vertices"%(i,num_vertices) ) 
+                reporter.flush()
             g.add_vertex( vertex_label )
+        
+        if reporter: reporter.write("\rLoaded %d vertices %s\n" % (num_vertices, " "*10))
         
         num_edges = self.num_edges()
         for i, (vertex1, vertex2, edgetype) in enumerate( self.all_edges() ):
-            if i%5000==0: print( "%d/%d edges"%(i,num_edges)); sys.stdout.flush()
+            if i%5000==0: 
+                reporter.write("\r%d/%d edges"%(i,num_edges) ) 
+                reporter.flush()
             g.add_edge( vertex1, vertex2, edgetype )
+        if reporter: reporter.write("\rLoaded %d edges %s\n" % (num_edges, " "*10))
         
         return g
         
 
-if __name__=='__main__':
-    
+def main():
     if len(argv) < 2:
         print "usage: python graphdb.py [vertex1, [vertex2]]"
-        exit()
+        return
     
     graphdb_filename = argv[1]
     graphdb = GraphDatabase( graphdb_filename )
@@ -154,7 +188,7 @@ if __name__=='__main__':
         print "resources:"
         for name, resource in graphdb.resources():
             print name, resource
-        exit()
+        return
     
     vertex1 = argv[2]
     for vertex1, vertex2, edgetype in graphdb.all_outgoing( vertex1 ):
@@ -163,3 +197,6 @@ if __name__=='__main__':
         if len(argv) == 4:
             s0 = State(1,int(argv[3]))
             print "\t"+str(edgetype.walk( s0 ))
+
+if __name__=='__main__':
+    main()

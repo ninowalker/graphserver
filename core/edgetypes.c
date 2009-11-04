@@ -8,8 +8,12 @@ WalkOptions*
 woNew() {
     WalkOptions* ret = (WalkOptions*)malloc( sizeof(WalkOptions) );
     ret->transfer_penalty = 0;
+    ret->turn_penalty = 0;
     ret->walking_speed = 0.85; //meters per second
     ret->walking_reluctance = 1;
+    ret->uphill_slowness = 0.08; //Factor by which someone's speed is slowed going uphill. A 15 mph rider on a flat will climb at 1.2 mph, for example.
+    ret->downhill_fastness = 1.96; // s/m. Number of seconds regained for every foot dropped. 10 feet dropped will gain you six seconds.
+    ret->hill_reluctance = 1.5; //Factor by which an uphill stretch is penalized, in addition to whatever time is lost by simply gaining.
     ret->max_walk = 10000; //meters
     ret->walking_overage = 0.1;
     return ret;
@@ -50,6 +54,36 @@ woSetWalkingReluctance( WalkOptions* this, float walking_reluctance ) {
     this->walking_reluctance = walking_reluctance;
 }
 
+float
+woGetUphillSlowness( WalkOptions* this ) {
+    return this->uphill_slowness;
+}
+
+void
+woSetUphillSlowness( WalkOptions* this, float uphill_slowness ) {
+    this->uphill_slowness = uphill_slowness;
+}
+
+float
+woGetDownhillFastness( WalkOptions* this ) {
+    return this->downhill_fastness;
+}
+
+void
+woSetDownhillFastness( WalkOptions* this, float downhill_fastness ) {
+    this->downhill_fastness = downhill_fastness;
+}
+
+float
+woGetHillReluctance( WalkOptions* this ) {
+    return this->hill_reluctance;
+}
+
+void
+woSetHillReluctance( WalkOptions* this, float hill_reluctance ) {
+    this->hill_reluctance = hill_reluctance;
+}
+
 int
 woGetMaxWalk( WalkOptions* this ) {
     return this->max_walk;
@@ -70,6 +104,16 @@ woSetWalkingOverage( WalkOptions* this, float walking_overage ) {
     this->walking_overage = walking_overage;
 }
 
+int
+woGetTurnPenalty( WalkOptions* this ) {
+    return this->turn_penalty;
+}
+
+void
+woSetTurnPenalty( WalkOptions* this, int turn_penalty ) {
+    this->turn_penalty = turn_penalty;
+}
+
 //STATE FUNCTIONS
 State*
 stateNew(int n_agencies, long time) {
@@ -78,9 +122,8 @@ stateNew(int n_agencies, long time) {
   ret->weight = 0;
   ret->dist_walked = 0;
   ret->num_transfers = 0;
-  ret->prev_edge_name = NULL;
   ret->trip_id = NULL;
-  ret->prev_edge_type = PL_NONE;
+  ret->prev_edge = NULL;
   ret->n_agencies = n_agencies;
   ret->service_periods = (ServicePeriod**)malloc(n_agencies*sizeof(ServicePeriod*)); //hash of strings->calendardays
 
@@ -122,11 +165,8 @@ stateGetDistWalked( State* this ) { return this->dist_walked; }
 int
 stateGetNumTransfers( State* this ) { return this->num_transfers; }
 
-edgepayload_t
-stateGetPrevEdgeType( State* this ) { return this->prev_edge_type; }
-
-char*
-stateGetPrevEdgeName( State* this ) { return this->prev_edge_name; }
+EdgePayload*
+stateGetPrevEdge( State* this ) { return this->prev_edge; }
 
 char*
 stateGetTripId( State* this ) { return this->trip_id; }
@@ -153,10 +193,7 @@ void
 stateSetServicePeriod( State* this,  int agency, ServicePeriod* cal ) { this->service_periods[agency] = cal; }
 
 void
-stateSetPrevEdgeName( State* this, char* name ) { this->prev_edge_name = name; }
-
-void
-stateSetPrevEdgeType( State* this, edgepayload_t type ) { this->prev_edge_type = type; }
+stateSetPrevEdge( State* this, EdgePayload* edge ) { this->prev_edge = edge; }
 
 //--------------------EDGEPAYLOAD FUNCTIONS-------------------
 
@@ -180,12 +217,6 @@ epDestroy( EdgePayload* this ) {
     case PL_STREET:
       streetDestroy( (Street*)this );
       break;
-    case PL_TRIPHOPSCHED:
-      thsDestroy( (TripHopSchedule*)this );
-      break;
-    case PL_TRIPHOP:
-      triphopDestroy( (TripHop*)this );
-      break;
     case PL_LINK:
       linkDestroy( (Link*)this );
       break;
@@ -197,6 +228,9 @@ epDestroy( EdgePayload* this ) {
       break;
     case PL_HEADWAY:
       headwayDestroy( (Headway*)this );
+      break;
+    case PL_EGRESS:
+      egressDestroy( (Egress*)this ); 
       break;
     default:
       free( this );
@@ -214,7 +248,7 @@ epWalk( EdgePayload* this, State* params, WalkOptions* options ) {
     return NULL;
 
   if( this->type == PL_EXTERNVALUE ) {
-    return cpWalk( (CustomPayload*)this, params );
+    return cpWalk( (CustomPayload*)this, params, options );
   }
   
   return this->walk( this, params, options );
@@ -227,41 +261,11 @@ epWalkBack( EdgePayload* this, State* params, WalkOptions* options ) {
     return NULL;
 
   if( this->type == PL_EXTERNVALUE ){
-    return cpWalkBack( (CustomPayload*)this, params );
+    return cpWalkBack( (CustomPayload*)this, params, options );
   }
   
   return this->walkBack( this, params, options );
 }
-
-EdgePayload*
-epCollapse( EdgePayload* this, State* params ) {
-  switch( this->type ) {
-    case PL_TRIPHOPSCHED:
-      return (EdgePayload*)thsCollapse( (TripHopSchedule*)this, params) ;
-    case PL_EXTERNVALUE:
-      return (EdgePayload*)cpCollapse( (CustomPayload*)this, params );
-    default:
-      return (EdgePayload*)this;
-  }
-}
-
-EdgePayload*
-epCollapseBack( EdgePayload* this, State* params ) {
-  switch( this->type ) {
-    case PL_TRIPHOPSCHED:
-      return (EdgePayload*)thsCollapseBack( (TripHopSchedule*)this, params);
-    case PL_EXTERNVALUE:
-      return (EdgePayload*)cpCollapseBack( (CustomPayload*)this, params );
-    default:
-      return (EdgePayload*)this;
-  }
-}
-
-//EdgePayload*
-//epCollapse( EdgePayload* this, State* param );
-
-//EdgePayload*
-//epCollapseBack( EdgePayload* this, State* param );
 
 //LINK FUNCTIONS
 Link*
@@ -302,12 +306,24 @@ streetNew(const char *name, double length) {
   ret->name = (char*)malloc((strlen(name)+1)*sizeof(char));
   strcpy(ret->name, name);
   ret->length = length;
+  ret->rise = 0;
+  ret->fall = 0;
+  ret->slog = 1;
+  ret->way = 0;
     
   //bind functions to methods
   ret->walk = &streetWalk;
   ret->walkBack = &streetWalkBack;
 
   return ret;
+}
+
+Street*
+streetNewElev(const char *name, double length, float rise, float fall) {
+    Street* ret = streetNew( name, length );
+    ret->rise = rise;
+    ret->fall = fall;
+    return ret;
 }
 
 void
@@ -325,6 +341,69 @@ double
 streetGetLength(Street* this) {
     return this->length;
 }
+
+float
+streetGetRise(Street* this) {
+    return this->rise;
+}
+
+float
+streetGetFall(Street* this) {
+    return this->fall;
+}
+
+float
+streetGetSlog(Street* this) {
+    return this->slog;
+}
+
+void
+streetSetSlog(Street* this, float slog) {
+    this->slog = slog;
+}
+
+long
+streetGetWay(Street* this) {
+    return this->way;   
+}
+
+void
+streetSetWay(Street* this, long way) {
+    this->way = way;
+}
+
+//EGRESS FUNCTIONS
+Egress*
+egressNew(const char *name, double length) {
+  Egress* ret = (Egress*)malloc(sizeof(Egress));
+  ret->type = PL_EGRESS;
+  ret->name = (char*)malloc((strlen(name)+1)*sizeof(char));
+  strcpy(ret->name, name);
+  ret->length = length;
+  
+  //bind functions to methods
+  ret->walk = &egressWalk;
+  ret->walkBack = &egressWalkBack;
+
+  return ret;
+}
+
+void
+egressDestroy(Egress* tokill) {
+  free(tokill->name);
+  free(tokill);
+}
+
+char*
+egressGetName(Egress* this) {
+    return this->name;
+}
+
+double
+egressGetLength(Egress* this) {
+    return this->length;
+}
+
 
 //WAIT FUNCTIONS
 Wait*
@@ -353,6 +432,29 @@ waitGetEnd(Wait* this) {
 Timezone*
 waitGetTimezone(Wait* this) {
     return this->timezone;
+}
+
+//ElapseTime FUNCTIONS
+ElapseTime*
+elapseTimeNew(long seconds) {
+    ElapseTime* ret = (ElapseTime*)malloc(sizeof(ElapseTime));
+    ret->type = PL_ELAPSE_TIME;
+    ret->seconds = seconds;
+    
+    ret->walk = elapseTimeWalk;
+    ret->walkBack = elapseTimeWalkBack;
+    
+    return ret;
+}
+
+void
+elapseTimeDestroy(ElapseTime* tokill) {
+    free(tokill);
+}
+
+long
+elapseTimeGetSeconds(ElapseTime* this) {
+    return this->seconds;
 }
 
 //HEADWAY FUNCTIONS
@@ -430,6 +532,7 @@ tbNew( ServiceId service_id, ServiceCalendar* calendar, Timezone* timezone, int 
   ret->service_id = service_id;
     
   ret->walk = &tbWalk;
+  ret->walkBack = &tbWalkBack;
     
   ret->overage = 0;
     
@@ -663,7 +766,8 @@ tbWalk( EdgePayload* superthis, State* params, WalkOptions* options ) {
     int wait = (next_boarding_time - time_since_midnight);
     
     ret->time   += wait;
-    ret->weight += wait + 1; //transfer penalty
+    ret->weight += wait + 1; //base transfer penalty
+    ret->weight += options->transfer_penalty;
     
     ret->trip_id = this->trip_ids[next_boarding_index];
     
@@ -677,6 +781,14 @@ tbWalk( EdgePayload* superthis, State* params, WalkOptions* options ) {
     
     return ret;
     
+}
+
+inline State*
+tbWalkBack(EdgePayload* this, State* params, WalkOptions* options) {
+    State* ret = stateDup( params );
+    ret->trip_id = NULL;
+    
+    return ret;
 }
 
 // HEADWAYBOARD FUNCTIONS
@@ -699,6 +811,7 @@ hbNew(  ServiceId service_id, ServiceCalendar* calendar, Timezone* timezone, int
   ret->service_id = service_id;
     
   ret->walk = &hbWalk;
+  ret->walkBack = &hbWalkBack;
     
   return ret;
 }
@@ -805,6 +918,173 @@ hbWalk( EdgePayload* superthis, State* params, WalkOptions* options ) {
     
     ret->time   += wait;
     ret->weight += wait + 1; //transfer penalty
+    ret->weight += options->transfer_penalty;
+    
+    ret->trip_id = this->trip_id;
+    
+    // Make sure the service period caches are updated if we've traveled over a service period boundary
+    int i;
+    for(i=0; i<params->n_agencies; i++) {
+        if( ret->service_periods[i] && ret->time >= ret->service_periods[i]->end_time) {
+          ret->service_periods[i] = ret->service_periods[i]->next_period;
+        }
+    }
+    
+    return ret;
+    
+}
+
+inline State*
+hbWalkBack(EdgePayload* superthis, State* params, WalkOptions* options) {
+    HeadwayBoard* this = (HeadwayBoard*)superthis;
+    
+    State* ret = stateDup( params );
+    
+    int wait = this->headway_secs; 
+    ret->time   -= wait;
+    ret->weight += wait; //transfer penalty
+    ret->trip_id = NULL;
+    
+    return ret;
+}
+
+// HEADWAYALIGHT FUNCTIONS
+
+HeadwayAlight*
+haNew(  ServiceId service_id, ServiceCalendar* calendar, Timezone* timezone, int agency, char* trip_id, int start_time, int end_time, int headway_secs ) {
+  HeadwayAlight* ret = (HeadwayAlight*)malloc(sizeof(HeadwayAlight));
+  ret->type = PL_HEADWAYALIGHT;
+
+  int n = strlen(trip_id)+1;
+  ret->trip_id = (char*)malloc(sizeof(char)*(n));
+  memcpy(ret->trip_id, trip_id, n);
+  ret->start_time = start_time;
+  ret->end_time = end_time;
+  ret->headway_secs = headway_secs;
+    
+  ret->calendar = calendar;
+  ret->timezone = timezone;
+  ret->agency = agency;
+  ret->service_id = service_id;
+    
+  ret->walk = &haWalk;
+  ret->walkBack = &haWalkBack;
+    
+  return ret;
+}
+
+void
+haDestroy(HeadwayAlight* this) {
+  free( this->trip_id );
+  free( this );
+}
+
+ServiceCalendar*
+haGetCalendar( HeadwayAlight* this ) {
+  return this->calendar;
+}
+
+Timezone*
+haGetTimezone( HeadwayAlight* this ) {
+  return this->timezone;
+}
+
+int
+haGetAgency( HeadwayAlight* this ) {
+  return this->agency;
+}
+
+ServiceId
+haGetServiceId( HeadwayAlight* this ) {
+  return this->service_id;
+}
+
+char*
+haGetTripId( HeadwayAlight* this ) {
+  return this->trip_id;
+}
+
+int
+haGetStartTime( HeadwayAlight* this ) {
+  return this->start_time;
+}
+
+int
+haGetEndTime( HeadwayAlight* this ) {
+  return this->end_time;
+}
+
+int
+haGetHeadwaySecs( HeadwayAlight* this ) {
+  return this->headway_secs;
+}
+
+inline State*
+haWalk(EdgePayload* this, State* params, WalkOptions* options) {
+    State* ret = stateDup( params );
+    ret->trip_id = NULL;
+    
+    return ret;
+}
+
+inline State*
+haWalkBack( EdgePayload* superthis, State* params, WalkOptions* options ) {
+    HeadwayAlight* this = (HeadwayAlight*)superthis;
+    
+    //Get service period cached in travel state. If it doesn't exist, figure it out and cache it
+    ServicePeriod* service_period = params->service_periods[this->agency];
+    if( !service_period )
+        service_period = scPeriodOfOrBefore( this->calendar, params->time );
+        params->service_periods[this->agency] = service_period;
+    
+        //If still can't find service_period, params->time is beyond service calendar, so bail
+        if( !service_period )
+            return NULL;
+    
+    long time_since_midnight = tzTimeSinceMidnight( this->timezone, params->time );
+        
+    if( !spPeriodHasServiceId( service_period, this->service_id ) ) {
+        
+        /* If the boarding schedule extends past midnight - for example, you can board a train on the Friday schedule until
+         * 2 AM Saturday morning - and the travel_state.time_since_midnight is less than this overage - for example, 1 AM, but
+         * the travel_state.service_period will show Saturday and not Friday, then:
+         * 
+         * Check if the boarding schedule service_id is running in the travel_state's yesterday period. If it is, simply advance the 
+         * time_since_midnight by a day and continue. If not, this boarding schedule was not running today or yesterday, so as far
+         * as we're concerned, it's not running at all
+         *
+         * TODO - figure out an algorithm for the general cse
+         */
+        
+        if( service_period->prev_period &&
+            spPeriodHasServiceId( service_period->prev_period, this->service_id )) {
+                
+            time_since_midnight += SECS_IN_DAY;
+        } else {
+            return NULL;
+        }
+        
+    }
+    
+    if (time_since_midnight < this->start_time ) {
+        return NULL;
+    }
+    
+    // Dupe state and advance time by the waiting time
+    State* ret = stateDup( params );
+    
+    ret->num_transfers += 1;
+    
+    int wait = 0;
+    
+    if (time_since_midnight > this->end_time )
+        wait += (time_since_midnight - this->end_time);
+    
+    ret->time   -= wait;
+    ret->weight += wait + 1; //transfer penalty
+    ret->weight += options->transfer_penalty;
+    
+    ret->trip_id = this->trip_id;
     
     // Make sure the service period caches are updated if we've traveled over a service period boundary
     int i;
@@ -827,6 +1107,7 @@ crNew( int crossing_time ) {
   ret->crossing_time = crossing_time;
     
   ret->walk = &crWalk;
+  ret->walkBack = &crWalkBack;
     
   return ret;
 }
@@ -863,21 +1144,196 @@ crWalk( EdgePayload* superthis, State* params, WalkOptions* options ) {
     
 }
 
+inline State*
+crWalkBack( EdgePayload* superthis, State* state, WalkOptions* options ) {
+    Crossing* this = (Crossing*)superthis;
+    
+    // Dupe state and advance time by the waiting time
+    State* ret = stateDup( state );
+    
+    ret->time   -= this->crossing_time;
+    ret->weight += this->crossing_time;
+    
+    // Make sure the service period caches are updated if we've traveled over a service period boundary
+    int i;
+    for(i=0; i<state->n_agencies; i++) {
+        if( ret->service_periods[i] && ret->time < ret->service_periods[i]->begin_time) {
+          ret->service_periods[i] = ret->service_periods[i]->prev_period;
+        }
+    }
+    
+    return ret;
+    
+}
+
 // ALIGHT FUNCTIONS
 
 Alight*
-alNew() {
-    Alight* ret = (Alight*)malloc(sizeof(Alight));
-    ret->type = PL_ALIGHT;
+alNew( ServiceId service_id, ServiceCalendar* calendar, Timezone* timezone, int agency ) {
+  Alight* ret = (Alight*)malloc(sizeof(Alight));
+  ret->type = PL_ALIGHT;
+  ret->n = 0;
+  ret->arrivals = NULL;
+  ret->trip_ids = NULL;
     
-    ret->walk = &alWalk;
+  ret->calendar = calendar;
+  ret->timezone = timezone;
+  ret->agency = agency;
+  ret->service_id = service_id;
     
-    return ret;
+  ret->walk = &alWalk;
+  ret->walkBack = &alWalkBack;
+    
+  ret->overage = 0;
+    
+  return ret;
 }
 
 void
 alDestroy(Alight* this) {
-    free(this);
+  int i;
+  for(i=0; i<this->n; i++) {
+    free(this->trip_ids[i]);
+  }
+  if(this->trip_ids) {
+    free(this->trip_ids);
+  }
+  if(this->arrivals){
+    free(this->arrivals);
+  }
+  free( this );
+}
+
+ServiceCalendar*
+alGetCalendar( Alight* this ) {
+  return this->calendar;
+}
+
+Timezone*
+alGetTimezone( Alight* this ) {
+  return this->timezone;
+}
+
+int
+alGetAgency( Alight* this ) {
+  return this->agency;
+}
+
+ServiceId
+alGetServiceId( Alight* this ) {
+  return this->service_id;
+}
+
+int
+alGetNumAlightings( Alight* this) {
+  return this->n;
+}
+
+void
+alAddAlighting(Alight* this, char* trip_id, int arrival) {
+    if (arrival > SECS_IN_DAY+this->overage)
+        this->overage = arrival-SECS_IN_DAY;
+    
+    // init the trip_id, depart list
+    if(this->n==0) {
+        this->arrivals = (int*)malloc(sizeof(int));
+        this->trip_ids = (char**)malloc(sizeof(char*));
+        
+        this->arrivals[0] = arrival;
+        
+        int n = strlen(trip_id)+1;
+        this->trip_ids[0] = (char*)malloc(sizeof(char)*(n));
+        memcpy(this->trip_ids[0], trip_id, n);
+        
+    } else {
+        //allocate new, expanded lists with size enough for the extra departure
+        int* next_arrivals = (int*)malloc((this->n+1)*sizeof(int));
+        char** next_trip_ids = (char**)malloc((this->n+1)*sizeof(char*));
+        
+        //find insertion point
+        int m = alSearchAlightingsList(this, arrival);
+        
+        //copy old list to new list up to insertion point
+        int i;
+        for(i=0; i<m; i++) {
+            next_arrivals[i] = this->arrivals[i];
+            next_trip_ids[i] = this->trip_ids[i];
+        }
+        
+        //copy new departure into lists
+        next_arrivals[m] = arrival;
+        int strn = strlen(trip_id)+1;
+        next_trip_ids[m] = (char*)malloc(sizeof(char)*(strn));
+        memcpy(next_trip_ids[m], trip_id, strn);
+        
+        //copy old list to new list from insertion point on
+        for(i=m; i<this->n; i++) {
+            next_arrivals[i+1] = this->arrivals[i];
+            next_trip_ids[i+1] = this->trip_ids[i];
+        }
+        
+        //free and replace old lists
+        free(this->arrivals);
+        free(this->trip_ids);
+        this->arrivals = next_arrivals;
+        this->trip_ids = next_trip_ids;
+    }
+    
+    this->n += 1;
+}
+
+char*
+alGetAlightingTripId(Alight* this, int i) {
+    if(i<0 || i >= this->n) {
+        return NULL;
+    }
+    
+    return this->trip_ids[i];
+}
+
+int
+alGetAlightingArrival(Alight* this, int i) {
+    if(i<0 || i >= this->n) {
+        return -1;
+    }
+    
+    return this->arrivals[i];
+}
+
+int
+binsearch(int* ary, int n, int key, int before) {
+    int first = 0;
+    int last = n-1;
+    int mid; 
+    
+    while( first <= last ) {
+        mid = (first+last)/2;
+        if( key > ary[mid] ) {
+            first = mid+1;
+        } else if( key < ary[mid] ) {
+            last = mid-1;
+        } else {
+            return mid;
+        }
+    }
+    
+    return first-before;
+}
+
+int
+alSearchAlightingsList(Alight* this, int time) {
+    return binsearch( this->arrivals, this->n, time, 0);
+}
+
+int
+alGetLastAlightingIndex(Alight* this, int time) {
+    //if insertion point is before end of array, -1 will be returned, which is coincidentally the error code
+    return binsearch( this->arrivals, this->n, time, 1 );
+}
+
+int
+alGetOverage(Alight* this) {
+    return this->overage;
 }
 
 inline State*
@@ -888,212 +1344,87 @@ alWalk(EdgePayload* this, State* params, WalkOptions* options) {
     return ret;
 }
 
-//TRIPHOP FUNCTIONS
-
-//tests the order of the hops, by terminus time, for use with sorting functions
-int hopcmp(const void* a, const void* b) {
-  TripHop** aa = (TripHop**)a;
-  TripHop** bb = (TripHop**)b;
-  
-  TripHop* ac = *aa;
-  TripHop* bc = *bb;
-  if(ac->arrive < bc->arrive)
-    return -1;
-  else if(ac->arrive > bc->arrive)
-    return 1;
-  else {
-    return 0;
-  }
-}
-
-/*
- * Receives n tuples consisting if [depart, arrive, trip_id], all associated with one service_id
- */
-
-TripHopSchedule*
-thsNew( int *departs, int *arrives, char **trip_ids, int n, ServiceId service_id, ServiceCalendar* calendar, Timezone* timezone, int agency ) {
-  TripHopSchedule* ret = (TripHopSchedule*)malloc(sizeof(TripHopSchedule));
-  ret->type = PL_TRIPHOPSCHED;
-  ret->hops = (TripHop**)malloc(n*sizeof(TripHop*));
-  ret->n = n;
-  ret->service_id = service_id;
-  ret->calendar = calendar;
-  ret->timezone = timezone;
-  ret->agency = agency;
-
-  int i;
-  for(i=0; i<n; i++) {
-    ret->hops[i] = triphopNew( departs[i], arrives[i], trip_ids[i], calendar, timezone, agency, service_id );
-  }
-
-  //make sure departure and arrival arrays are sorted, as they're subjected to a binsearch
-  qsort(ret->hops, n, sizeof(TripHop*), hopcmp);
-  
-  //bind functions to methods
-  ret->walk = &thsWalk;
-  ret->walkBack = &thsWalkBack;
-
-  return ret; // return NULL;
-}
-
-TripHop*
-triphopNew(int depart, int arrive, char* trip_id, ServiceCalendar* calendar, Timezone* timezone, int agency, ServiceId service_id) {
-    TripHop* ret = (TripHop*)malloc(sizeof(TripHop));
+inline State*
+alWalkBack( EdgePayload* superthis, State* params, WalkOptions* options ) {
+    Alight* this = (Alight*)superthis;
     
-    ret->type = PL_TRIPHOP;
-    ret->depart = depart;
-    ret->arrive = arrive;
-    ret->transit = (arrive-depart);
-    int n = strlen(trip_id)+1;
-    ret->trip_id = (char*)malloc(sizeof(char)*(n));
-    memcpy(ret->trip_id, trip_id, n);
-    ret->calendar = calendar;
-    ret->timezone = timezone;
-    ret->agency = agency;
-    ret->service_id = service_id;
+    //Get service period cached in travel state. If it doesn't exist, figure it out and cache it
+    ServicePeriod* service_period = params->service_periods[this->agency];
+    if( !service_period )
+        service_period = scPeriodOfOrBefore( this->calendar, params->time );
+        params->service_periods[this->agency] = service_period;
     
-  //bind functions to methods
-  ret->walk = &triphopWalk;
-  ret->walkBack = &triphopWalkBack;
+        //If still can't find service_period, params->time is beyond service calendar, so bail
+        if( !service_period )
+            return NULL;
+    
+    long time_since_midnight = tzTimeSinceMidnight( this->timezone, params->time );
+        
+    if( !spPeriodHasServiceId( service_period, this->service_id ) ) {
+        
+        /* If the boarding schedule extends past midnight - for example, you can board a train on the Friday schedule until
+         * 2 AM Saturday morning - and the travel_state.time_since_midnight is less than this overage - for example, 1 AM, but
+         * the travel_state.service_period will show Saturday and not Friday, then:
+         * 
+         * Check if the boarding schedule service_id is running in the travel_state's yesterday period. If it is, simply advance the 
+         * time_since_midnight by a day and continue. If not, this boarding schedule was not running today or yesterday, so as far
+         * as we're concerned, it's not running at all
+         *
+         * TODO - figure out an algorithm for the general cse
+         */
+        
+        if( service_period->prev_period &&
+            spPeriodHasServiceId( service_period->prev_period, this->service_id )) {
+                
+            time_since_midnight += SECS_IN_DAY;
+        } else {
+            return NULL;
+        }
+        
+    }
+    
+    int last_alighting_index = alGetLastAlightingIndex( this, time_since_midnight );
+    
+    if( last_alighting_index == -1 ) {
+        return NULL;
+    }
+    
+    // Dupe state and advance time by the waiting time
+    State* ret = stateDup( params );
+    
+    ret->num_transfers += 1;
+    
+    int last_alighting_time = this->arrivals[last_alighting_index];
+    int wait = (time_since_midnight - last_alighting_time);
+    
+    ret->time   -= wait;
+    ret->weight += wait + 1; //transfer penalty
+    ret->weight += options->transfer_penalty;
+    
+    ret->trip_id = this->trip_ids[last_alighting_index];
+    
+    // Make sure the service period caches are updated if we've traveled over a service period boundary
+    int i;
+    for(i=0; i<params->n_agencies; i++) {
+        if( ret->service_periods[i] && ret->time < ret->service_periods[i]->begin_time) {
+          ret->service_periods[i] = ret->service_periods[i]->prev_period;
+        }
+    }
     
     return ret;
+    
 }
-
-//GEOM FUNTIONS
-
-Geom*
-geomNew (char * geomdata) {
-
-        if (geomdata==NULL)
-		return NULL;
-	Geom* tmp=(Geom *)malloc(sizeof(Geom));
-        tmp->data=strdup(geomdata);
-	return tmp;
-}
-
-void
-geomDestroy(Geom* this){
-
-	if (this!=NULL)
-	{
-		if (this->data!=NULL) free(this->data);
-		free(this);
-		this=NULL;
-	}
-}
-
-
-//COORDINATES FUNTIONS
-Coordinates*
-coordinatesNew(long latitude,long length)
-{
-	Coordinates* ret=(Coordinates*)malloc(sizeof(Coordinates));
-	ret->lat=latitude;
-	ret->lon=length;
-	return ret;
-}
-
-void
-coordinatesDestroy(Coordinates* this){
-	if (this!=NULL) free(this);
-}
-
-Coordinates*
-coordinatesDup(Coordinates* this) {
-	Coordinates* ret=(Coordinates*)malloc(sizeof(Coordinates));
-	memcpy(ret,this,sizeof( Coordinates ));
-	return ret;
-}
-
-//DEBUG CODE
-void
-thsPrintHops(TripHopSchedule* this) {
-  int i;
-  printf("--==--\n");
-  for(i=0; i<this->n; i++) {
-    printf("Hop: %d, %d, %s\n", this->hops[i]->depart, this->hops[i]->arrive, this->hops[i]->trip_id);
-  }
-  printf("--==--\n");
-}
-
-void
-thsDestroy(TripHopSchedule* this) {
-    int i;
-  	for(i=0; i<this->n; i++) {
-        //free( this->hops[i]->trip_id );
-        triphopDestroy(this->hops[i]);
-  	}
-
-  	free(this->hops);
-  	free(this);
-}
-
-ServiceCalendar*
-thsGetCalendar(TripHopSchedule* this ) { return this->calendar; }
-
-void
-triphopDestroy(TripHop* tokill) {
-  free(tokill->trip_id);
-  free(tokill);
-}
-
-int
-thsGetN(TripHopSchedule* this) {
-    return this->n;
-}
-
-ServiceId
-thsGetServiceId(TripHopSchedule* this) {
-    return this->service_id;
-}
-
-Timezone*
-thsGetTimezone(TripHopSchedule* this) {
-    return this->timezone;
-}
-
-int
-triphopDepart( TripHop* this ) { return this->depart; }
-
-int
-triphopArrive( TripHop* this ) { return this->arrive; }
-
-int
-triphopTransit( TripHop* this ) { return this->transit; }
-
-char *
-triphopTripId( TripHop* this ) { return this->trip_id; }
-
-ServiceCalendar*
-triphopCalendar( TripHop* this ) { return this->calendar; }
-
-Timezone*
-triphopTimezone( TripHop* this ) { return this->timezone; }
-
-int
-triphopAuthority( TripHop* this ) { return this->agency; }
-
-int
-triphopServiceId( TripHop* this ) { return this->service_id; }
-
-TripHop*
-thsGetHop(TripHopSchedule* this, int i) { return this->hops[i]; }
-
 
 // CUSTOM Payload Functions
 
 PayloadMethods*
 defineCustomPayloadType(void (*destroy)(void*),
-						State* (*walk)(void*,State*),
-						State* (*walkback)(void*,State*),
-						EdgePayload* (*collapse)(void*,State*),
-						EdgePayload* (*collapseBack)(void*,State*)) {
+						State* (*walk)(void*,State*,WalkOptions*),
+						State* (*walkback)(void*,State*,WalkOptions*)) {
 	PayloadMethods* this = (PayloadMethods*)malloc(sizeof(PayloadMethods));
 	this->destroy = destroy;
 	this->walk = walk;
 	this->walkBack = walkback;
-	this->collapse = collapse;
-	this->collapseBack = collapseBack;
 	return this;
 }
 
@@ -1128,30 +1459,16 @@ cpMethods( CustomPayload* this ) {
 }
 
 State*
-cpWalk(CustomPayload* this, State* params) {
-	State* s = this->methods->walk(this->soul, params);
-	s->prev_edge_type = PL_EXTERNVALUE;
+cpWalk(CustomPayload* this, State* params, WalkOptions* walkoptions) {
+	State* s = this->methods->walk(this->soul, params, walkoptions);
+	s->prev_edge = (EdgePayload*)this;
 	return s;
 }
 State*
-cpWalkBack(CustomPayload* this, State* params) {
-	State* s = this->methods->walkBack(this->soul, params);
-	s->prev_edge_type = PL_EXTERNVALUE;
+cpWalkBack(CustomPayload* this, State* params, WalkOptions* walkoptions) {
+	State* s = this->methods->walkBack(this->soul, params, walkoptions);
+	s->prev_edge = (EdgePayload*)this;
 	return s;
-}
-
-EdgePayload*
-cpCollapse(CustomPayload* this, State* params) {
-	if (this->methods->collapse)
-		return this->methods->collapse(this->soul, params);
-	return (EdgePayload*)this;
-}
-
-EdgePayload*
-cpCollapseBack(CustomPayload* this, State* params) {
-	if (this->methods->collapseBack)
-		return this->methods->collapseBack(this->soul, params);
-	return (EdgePayload*)this;
 }
 
 #undef ROUTE_REVERSE

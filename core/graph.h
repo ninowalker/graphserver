@@ -43,8 +43,9 @@ struct Vertex {
 struct Edge {
   Vertex* from;
   Vertex* to;
-  Geom* geom;
   EdgePayload* payload;
+  long thickness;
+  int enabled;
 } ;
 
 struct ListNode {
@@ -63,6 +64,9 @@ gDestroy( Graph* this, int free_vertex_payloads, int free_edge_payloads );
 Vertex*
 gAddVertex( Graph* this, char *label );
 
+void
+gRemoveVertex( Graph* this, char *label, int free_vertex_payload, int free_edge_payloads );
+
 Vertex*
 gGetVertex( Graph* this, char *label );
 
@@ -71,9 +75,6 @@ gAddVertices( Graph* this, char **labels, int n );
 
 Edge*
 gAddEdge( Graph* this, char *from, char *to, EdgePayload *payload );
-
-Edge*
-gAddEdgeGeom( Graph* this, char *from, char *to, EdgePayload *payload, char *datageom );
 
 Vertex**
 gVertices( Graph* this, long* num_vertices );
@@ -91,6 +92,13 @@ gShortestPath( Graph* this, char *from, char *to, State* init_state, int directi
 long
 gSize( Graph* this );
 
+void
+gSetThicknesses( Graph* this, char *root_label );
+
+void
+gSetVertexEnabled( Graph *this, char *label, int enabled );
+
+
 //VERTEX FUNCTIONS
 
 Vertex *
@@ -106,13 +114,7 @@ Edge*
 vLink(Vertex* this, Vertex* to, EdgePayload* payload) ;
 
 Edge*
-vLinkGeom(Vertex* this, Vertex* to, EdgePayload* payload, char *datageom) ;
-
-Edge*
 vSetParent( Vertex* this, Vertex* parent, EdgePayload* payload );
-
-Edge*
-vSetParentGeom( Vertex* this, Vertex* parent, EdgePayload* payload, char * geomdata );
 
 inline ListNode*
 vGetOutgoingEdgeList( Vertex* this );
@@ -143,9 +145,6 @@ vPayload( Vertex* this );
 Edge*
 eNew(Vertex* from, Vertex* to, EdgePayload* payload);
 
-Edge*
-eNewGeom(Vertex* from, Vertex* to, EdgePayload* payload,char * datageom);
-
 void
 eDestroy(Edge *this, int destroy_payload) ;
 
@@ -158,9 +157,6 @@ eWalk(Edge *this, State* params, WalkOptions* options) ;
 State*
 eWalkBack(Edge *this, State *params, WalkOptions* options) ;
 
-Edge*
-eGeom(Edge* this,char * datageom);
-
 Vertex*
 eGetFrom(Edge *this);
 
@@ -169,6 +165,18 @@ eGetTo(Edge *this);
 
 EdgePayload*
 eGetPayload(Edge *this);
+
+int
+eGetEnabled(Edge *this);
+
+void
+eSetEnabled(Edge *this, int enabled);
+
+long
+eGetThickness(Edge *this);
+
+void
+eSetThickness(Edge *this, long thickness);
 
 //LIST FUNCTIONS
 
