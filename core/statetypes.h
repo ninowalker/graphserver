@@ -50,8 +50,9 @@ scGetServiceIdString( ServiceCalendar* this, int service_id );
 int
 scGetServiceIdInt( ServiceCalendar* this, char* service_id );
 
-int
-scGetOrAddServiceIdInt( ServiceCalendar* this, char* service_id );
+// Causing problems as not defined anywhere
+//int
+//scGetOrAddServiceIdInt( ServiceCalendar* this, char* service_id );
 
 void
 scAddPeriod( ServiceCalendar* this, ServicePeriod* period );

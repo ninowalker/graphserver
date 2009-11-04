@@ -107,8 +107,9 @@ vNew( char* label ) ;
 void
 vDestroy(Vertex* this, int free_vertex_payload, int free_edge_payloads) ;
 
-void
-vMark(Vertex* this) ;
+// Causing problems for swig lib compilation, as it is not defined
+//void
+//vMark(Vertex* this) ;
 
 Edge*
 vLink(Vertex* this, Vertex* to, EdgePayload* payload) ;
@@ -148,8 +149,9 @@ eNew(Vertex* from, Vertex* to, EdgePayload* payload);
 void
 eDestroy(Edge *this, int destroy_payload) ;
 
-void
-eMark(Edge *this) ;
+// Causing problems for swig library as it is not defined.
+//void
+//eMark(Edge *this) ;
 
 State*
 eWalk(Edge *this, State* params, WalkOptions* options) ;
