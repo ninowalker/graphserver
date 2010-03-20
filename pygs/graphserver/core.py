@@ -66,7 +66,11 @@ class Graph(CShadow):
         
         self._cdel(self.soul, free_vertex_payloads, free_edge_payloads)
         self.soul = None
-            
+         
+    def serialize(self, gbin_filename, mm_filename):
+        self.check_destroyed()
+        lgs.gSerialize(self.soul, c_char_p(gbin_filename), c_char_p(mm_filename)) 
+        
     def add_vertex(self, label):
         #Vertex* gAddVertex( Graph* this, char *label );
         self.check_destroyed()

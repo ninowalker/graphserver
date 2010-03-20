@@ -75,6 +75,7 @@ typedef enum {
 #include "list.h"
 #include "servicecalendar.h"
 #include "timezone.h"
+#include "serialization.h"
 
 // things that everyone needs
 #include <stdlib.h>

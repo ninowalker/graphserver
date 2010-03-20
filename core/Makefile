@@ -29,7 +29,8 @@ OBJECTS= fibheap/dirfibheap.o \
     edgepayload.o \
     list.o \
     servicecalendar.o \
-    timezone.o
+    timezone.o \
+    serialization.o
 
 # You know what? Honestly? I don't know what most of these switches do.
 CFLAGS=-g -fno-strict-aliasing -O2 -fPIC -Wall
@@ -48,8 +49,16 @@ endif
 # they include change
 # see: http://www.cs.berkeley.edu/~smcpeak/autodepend/autodepend.html
 %.o: %.c
-	cc $*.c -c -o $@ $(CFLAGS)
-	cc $*.c -MM $(CFLAGS) > $*.d
+#	cc $*.c -c -o $@ $(CFLAGS)
+#	cc $*.c -MM $(CFLAGS) > $*.d
+	cc -arch i386 $*.c -c -o $@ $(CFLAGS)
+	cc -arch i386 $*.c -MM $(CFLAGS) > $*.d
+#	cc -arch i686 $*.c -c -o $@ $(CFLAGS)
+#	cc -arch i686 $*.c -MM $(CFLAGS) > $*.d
+#	cc -arch x86_64 $*.c -c -o $@ $(CFLAGS)
+#	cc -arch x86_64 $*.c -MM $(CFLAGS) > $*.d
+
+
 	@mv -f $*.d $*.d.tmp
 	@sed -e 's|.*:|$*.o:|' < $*.d.tmp > $*.d
 	@sed -e 's/.*://' -e 's/\\$$//' < $*.d.tmp | fmt -1 | \
@@ -58,7 +67,10 @@ endif
 -include $(OBJECTS:.o=.d)
 
 libgraphserver.so: $(OBJECTS)
-	cc -shared -o $@ $(OBJECTS) $(LDFLAGS)
+	cc -arch i386 -shared -o $@ $(OBJECTS) $(LDFLAGS)
+#	cc -arch i686 -shared -o $@ $(OBJECTS) $(LDFLAGS)
+#	cc -arch x86_64 -shared -o $@ $(OBJECTS) $(LDFLAGS)
+#	cc -shared -o $@ $(OBJECTS) $(LDFLAGS)
 
 install:
 	cp libgraphserver.so $(PREFIX)/lib
@@ -74,3 +86,5 @@ install:
 
 clean:
 	rm -f *.o *.so *~ *.d
+	rm -f ./*/*.o ./*/*.so ./*/*~ ./*/*.d
+

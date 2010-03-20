@@ -23,7 +23,7 @@ def gtfsdb_to_service_calendar(gtfsdb, agency_id=None):
     
     timezone_name = gtfsdb.agency_timezone_name( agency_id )
     
-    return service_calendar_from_timezone( gtfsdb, timezone )
+    return service_calendar_from_timezone( gtfsdb, timezone_name )
     
 def service_calendar_from_timezone(gtfsdb, timezone_name):
     
@@ -98,8 +98,8 @@ def load_bundle_to_boardalight_graph(g, agency_namespace, bundle, service_id, sc
         g.add_edge( patternstop_vx_name, "sta-%s"%stop_id, al )
     
     # add crossing edges
-    for j, crossing_time in enumerate(bundle.pattern.crossings):
-        c = Crossing( crossing_time )
+    for j, dwell in enumerate(bundle.pattern.dwells):
+        c = Crossing( dwell )
         g.add_edge( "psv-%s-%03d-%03d"%(agency_namespace,bundle.pattern.pattern_id,j), "psv-%s-%03d-%03d"%(agency_namespace,bundle.pattern.pattern_id,j+1), c )
             
 def load_gtfsdb_to_boardalight_graph(g, agency_namespace, gtfsdb, agency_id, service_ids, reporter=sys.stdout):

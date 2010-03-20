@@ -106,7 +106,7 @@ def gdb_boardalight_load_bundle(gdb, agency_namespace, bundle, service_id, sc, t
                       
     gdb.commit()
 
-def gdb_load_gtfsdb_to_boardalight(gdb, agency_namespace, gtfsdb, cursor, agency_id=None, maxtrips=None, reporter=sys.stdout):
+def gdb_load_gtfsdb_to_boardalight(gdb, agency_namespace, gtfsdb, cursor, agency_id=None, maxtrips=None,link_radius=0,link_obstruction=1.4, binary_graph_filename=None,memory_mapped_graph_filename=None, reporter=sys.stdout):
 
     # get graphserver.core.Timezone and graphserver.core.ServiceCalendars from gtfsdb for agency with given agency_id
     timezone_name = gtfsdb.agency_timezone_name(agency_id)
@@ -165,23 +165,56 @@ def gdb_load_gtfsdb_to_boardalight(gdb, agency_namespace, gtfsdb, cursor, agency
     for stop_id1, stop_id2, conn_type, distance in gtfsdb.execute( "SELECT * FROM connections" ):
         gdb.add_edge( "sta-%s"%stop_id1, "sta-%s"%stop_id2, Street( conn_type, distance ) )
         gdb.add_edge( "sta-%s"%stop_id2, "sta-%s"%stop_id1, Street( conn_type, distance ) )
+      
+    if link_radius:
+        if reporter: reporter.write( "Linking nearby stops...\n" )  
+        compiler.link_nearby_stops( gdb, gtfsdb, link_radius, link_obstruction )
+        
+    # Export to binary file(s)
+    if binary_graph_filename:
+        if reporter: reporter.write( "Incarnating graph...\n" )  
+        g = gdb.incarnate();
+        if reporter: reporter.write( "Performing serialization...\n" )  
+        g.serialize(binary_graph_filename, memory_mapped_graph_filename);
         
 def main():
+    agency_id = None;
+
     usage = """usage: python gdb_import_gtfs.py [options] <graphdb_filename> <gtfsdb_filename> [<agency_id>]"""
     parser = OptionParser(usage=usage)
     parser.add_option("-n", "--namespace", dest="namespace", default="0",
                       help="agency namespace")
     parser.add_option("-m", "--maxtrips", dest="maxtrips", default=None, help="maximum number of trips to load")
     
+    parser.add_option("-l", "--link", default=None,
+                      action="store", type="int", dest="link_radius", 
+                      help="create walking links between adjacent/nearby stations if not compiling with an OSMDB")
+    parser.add_option("-b", "--obstruction",
+                      action="store", type="float", dest="link_obstruction", default = 1, 
+                      help="true distances will be multiplied by this factor to simulate street structure (1.4 is roughly a rectangular street grid)")
+                      
+    parser.add_option("-a", "--agency_id",
+                      action="append", dest="agency_id", default=None,
+                      help="Specify the agency")
+    
+    parser.add_option("-2", "--binarygraph",
+                    action="store", dest="binary_graph_filename", default=None,
+                    help="specify a filename for the binary graph" )
+                    
+    parser.add_option("-3", "--mm_filename",
+                    action="store", dest="memory_mapped_graph_filename", default=None,
+                    help="specify a filename for the memory mapped graph" )
+    
     (options, args) = parser.parse_args()
     
-    if len(args) != 2:
+    if len(args) < 2:
         parser.print_help()
         exit(-1)
     
     graphdb_filename = args[0]
     gtfsdb_filename  = args[1]
-    agency_id        = args[2] if len(args)==3 else None
+    
+  #  agency_id        = args[2] if len(args)==3 else None
     
     print "importing from gtfsdb '%s' into graphdb '%s'"%(gtfsdb_filename, graphdb_filename)
     
@@ -189,7 +222,9 @@ def main():
     gdb = GraphDatabase( graphdb_filename, overwrite=False )
     
     maxtrips = int(options.maxtrips) if options.maxtrips else None
-    gdb_load_gtfsdb_to_boardalight(gdb, options.namespace, gtfsdb, gdb.get_cursor(), agency_id, maxtrips=maxtrips)
+    gdb_load_gtfsdb_to_boardalight(gdb, options.namespace, gtfsdb, gdb.get_cursor(), agency_id, maxtrips=maxtrips, binary_graph_filename=options.binary_graph_filename,memory_mapped_graph_filename=options.memory_mapped_graph_filename, link_radius=options.link_radius, 
+                          link_obstruction=options.link_obstruction)
+                          
     gdb.commit()
     
     print "done"
