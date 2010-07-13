@@ -75,4 +75,5 @@ install:
 	cp hashtable/hashtable_private.h $(PREFIX)/include/graphserver
 
 clean:
-	rm -f *.o *.so *~ *.d
+	rm -f *.{so,o,d} */*.{so,o,d} *~
+
