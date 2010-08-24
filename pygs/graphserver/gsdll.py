@@ -282,7 +282,7 @@ declarations = [\
 #    (lgs.defineCustomPayloadType, LGSTypes.PayloadMethods, [CFUNCTYPE(c_void_p, c_void_p), CFUNCTYPE(LGSTypes.State, c_void_p, LGSTypes.State, LGSTypes.WalkOptions), CFUNCTYPE(LGSTypes.State, c_void_p, LGSTypes.State, LGSTypes.WalkOptions)]),
     (lgs.defineCustomPayloadType, LGSTypes.PayloadMethods, None),
     (lgs.undefineCustomPayloadType, None, [LGSTypes.PayloadMethods]),
-    (lgs.cpNew, LGSTypes.CustomPayload, [c_void_p, LGSTypes.PayloadMethods]),
+    (lgs.cpNew, LGSTypes.CustomPayload, [py_object, LGSTypes.PayloadMethods]),
     (lgs.cpDestroy, None, [LGSTypes.CustomPayload]),
     (lgs.cpSoul, c_void_p, [LGSTypes.CustomPayload]),
     (lgs.cpMethods, LGSTypes.PayloadMethods, [LGSTypes.CustomPayload]),

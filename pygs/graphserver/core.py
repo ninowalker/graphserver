@@ -76,9 +76,9 @@ class Path(Structure):
         
     def getVertex( self, i ):
         vertex_soul = lgs.pathGetVertex( addressof(self), i )
-        
+
         # reinterpret the error code as an exception
-        if vertex_soul == NULL:
+        if vertex_soul in (NULL, None):
             raise IndexError("%d is out of bounds"%i)
         
         return Vertex.from_pointer( vertex_soul )
@@ -87,7 +87,7 @@ class Path(Structure):
         edge_soul = lgs.pathGetEdge( addressof(self), i )
         
         # reinterpret the error code as an exception
-        if edge_soul == NULL:
+        if edge_soul in (NULL, None):
             raise IndexError("%d is out of bounds"%i)
             
         return Edge.from_pointer( edge_soul )
@@ -160,7 +160,7 @@ class Graph(CShadow):
     def vertices(self):
         self.check_destroyed()
         
-        count = c_int()
+        count = c_long()
         p_va = lgs.gVertices(self.soul, byref(count))
         verts = []
         arr = cast(p_va, POINTER(c_void_p)) # a bit of necessary voodoo
