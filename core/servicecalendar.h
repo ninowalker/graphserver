@@ -82,6 +82,25 @@ spPrintPeriod( ServicePeriod* this ) ;
 inline long
 spNormalizeTime( ServicePeriod* this, int timezone_offset, long time ) ;
 
+long
+spBeginTime( ServicePeriod* this );
+
+long
+spEndTime( ServicePeriod* this );
+
+ServiceId*
+spServiceIds( ServicePeriod* this, int* count );
+
+ServicePeriod*
+spNextPeriod(ServicePeriod* this);
+
+ServicePeriod*
+spPreviousPeriod(ServicePeriod* this);
+
+long
+spDatumMidnight( ServicePeriod* this, int timezone_offset );
+
+
 struct Timezone {
     TimezonePeriod* head;
 } ; 

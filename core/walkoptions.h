@@ -60,4 +60,40 @@ woGetTurnPenalty( WalkOptions* this );
 void
 woSetTurnPenalty( WalkOptions* this, int turn_penalty );
 
+float
+woGetUphillSlowness( WalkOptions* this );
+
+void
+woSetUphillSlowness( WalkOptions* this, float uphill_slowness );
+
+float
+woGetDownhillFastness( WalkOptions* this );
+
+void
+woSetDownhillFastness( WalkOptions* this, float downhill_fastness );
+
+float
+woGetHillReluctance( WalkOptions* this );
+
+void
+woSetHillReluctance( WalkOptions* this, float hill_reluctance );
+
+int
+woGetMaxWalk( WalkOptions* this );
+
+void
+woSetMaxWalk( WalkOptions* this, int max_walk );
+
+float
+woGetWalkingOverage( WalkOptions* this );
+
+void
+woSetWalkingOverage( WalkOptions* this, float walking_overage );
+
+int
+woGetTurnPenalty( WalkOptions* this );
+
+void
+woSetTurnPenalty( WalkOptions* this, int turn_penalty );
+
 #endif

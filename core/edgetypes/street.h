@@ -54,4 +54,11 @@ streetGetWay(Street* this);
 void
 streetSetWay(Street* this, long way);
 
+float
+streetGetSlog(Street* this);
+
+void
+streetSetSlog(Street* this, float slog);
+
+
 #endif
