@@ -40,6 +40,9 @@ LDFLAGS= -L. -Bsymbolic-functions -Wall -ldl -lm -lc
 OS := $(shell uname)
 
 ifeq ($(OS),Darwin)
+#  to build in 32-bit mode:
+#  LDFLAGS += -dynamiclib -arch i386
+#  CFLAGS += -arch i386
   LDFLAGS += -dynamiclib
 else
   LDFLAGS += -shared
