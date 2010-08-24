@@ -38,6 +38,8 @@ typedef struct HeadwayBoard HeadwayBoard;
 typedef struct HeadwayAlight HeadwayAlight;
 typedef struct Crossing Crossing;
 typedef struct Alight Alight;
+typedef struct PayloadMethods PayloadMethods;
+typedef struct CustomPayload CustomPayload;
 
 typedef enum {    
   PL_STREET,
