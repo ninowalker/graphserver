@@ -4,7 +4,8 @@ from pycparser.c_ast import *
 
 FILTERS = [
     re.compile(r'//.*'),
-    re.compile(r'\binline\b')
+    re.compile(r'\binline\b'),
+    re.compile(r'\bextern\b')
 ]
 
 START_MULTILINE = re.compile(r'/\*.*')
@@ -35,7 +36,7 @@ decls = read_header("/Users/kolohe/dev/graphserver/core/graphserver.h")
 
 def extract_type(t):
     ptr = 0
-    if isinstance(t, (FuncDecl)): # return values or param names
+    if isinstance(t, (FuncDecl)): 
         t = t.type
     while isinstance(t, PtrDecl):
         t = t.type
@@ -47,6 +48,8 @@ def extract_type(t):
             t = t.type
             ptr += 1
         return (ptr, t.type.type.names[0])
+    elif isinstance(t, FuncDecl):
+        return (ptr, extract_function(t))
     else:
         return (ptr, t.names[0])
 
@@ -56,22 +59,35 @@ def extract_functions(header):
         t = CParser().parse("".join(content), "")
     except Exception, e:
         print "".join(content)
+        print e
         fail
 
     funcs = []
     for d in t.children():
         if not isinstance(d, Decl) or not d.name: 
             continue
-        f = dict(name=d.name, argtypes=[], restype=extract_type(d.type))
-        
-        funcs.append(f)
-        if not d.children()[0].args:
-            continue
-        params = [p for p in d.children()[0].args.params]
-        for p in params:
-            t = p.children()[0]
-            f['argtypes'].append(extract_type(t))
+
+        funcs.append(extract_function(d))
     return funcs
+
+def extract_function(d):
+    f = dict(argtypes=[], restype=extract_type(d.type))
+    if hasattr(d, 'name'):
+        f['name'] = d.name
+    first = d.children()[0]
+    args = None
+    if getattr(first,'args',None):
+        args = first.args
+    elif isinstance(d, FuncDecl):
+        args = d.args
+    else:
+        return f
+
+    params = [p for p in args.params]
+    for p in params:
+        t = p.children()[0]
+        f['argtypes'].append(extract_type(t))
+    return f
 
 def extract_types(header):
     tree = CParser().parse("".join(decls + header), "gs.h")
@@ -110,15 +126,16 @@ def declare_ctypes_functions(funcs, types, declclass="DLLTypes", dllname="dll"):
     types = dict((t['name'], t) for t in types)
     c = []
     
-    def typename(t, refoffset=0):
+    def typename(t,void="None"):
         ptr, s = t
-        #ptr += refoffset
         if s == "void":
             if ptr == 1:
                 return "c_void_p"
             if ptr == 2:
                 return "POINTER(c_void_p)"
-            return "None"
+            return void
+        elif type(s) == dict: # function ptr
+            return "CFUNCTYPE(%s)" % ", ".join([typename(s['restype'],"c_void_p")] + map(typename, s['argtypes']))
         elif s in types:
             if ptr > 1:
                 return "POINTER(%s.%s)" % (declclass,s)
@@ -135,15 +152,15 @@ def declare_ctypes_functions(funcs, types, declclass="DLLTypes", dllname="dll"):
         #c.append(str(f))
         c.append("(%s.%s, %s, [%s])" % (dllname, 
                                                 f['name'], 
-                                                typename(f['restype'],-1),
+                                                typename(f['restype']),
                                                 ", ".join((typename(p) for p in f['argtypes']))))
     return "declarations = [\\\n    %s\n]" % ",\n    ".join(c)
              
 
-import glob, itertools
+import glob, itertools, os
 funcs = []
-for f in itertools.chain(glob.glob("*.h"), glob.glob("*/*.h")):
-    if f.endswith("graphserver.h"): 
+for f in itertools.chain(glob.glob("*.h"), glob.glob("edgetypes/*.h")):
+    if os.path.basename(f) in ("graphserver.h",): 
         continue
     g = read_header(f)
     funcs.extend(extract_functions(g))
@@ -153,17 +170,19 @@ types = extract_types(g)
 
 print """
 from ctypes import *
-dll = CDLL("libgraphserver.so") 
+lgs = CDLL("libgraphserver.so") 
 
 def _declare(fun, restype, argtypes):
     fun.argtypes = argtypes
     fun.restype = restype
 
-print c_size_t.in_dll(dll, "EDGEPAYLOAD_ENUM_SIZE")
-
 """
 
 print define_ctypes_types(types, "LGSTypes")
+
+print """LGSTypes.edgepayload_t = {1:c_int8, 2:c_int16, 4:c_int32, 8:c_int64}[c_size_t.in_dll(lgs, "EDGEPAYLOAD_ENUM_SIZE").value]
+"""
+
 print declare_ctypes_functions(funcs, types, "LGSTypes", "lgs")
 
 print """
