@@ -56,17 +56,18 @@ endif
 # for each source file, ensuring that they are recompiled when the headers
 # they include change
 # see: http://www.cs.berkeley.edu/~smcpeak/autodepend/autodepend.html
-#.PHONY: gs_swig_wrap.c
 
 %.o: %.c
 	gcc $*.c -c -o $@ $(CFLAGS)
-#cc $*.c -MM $(CFLAGS) > $*.d
-#@mv -f $*.d $*.d.tmp
-#@sed -e 's|.*:|$*.o:|' < $*.d.tmp > $*.d
-#@sed -e 's/.*://' -e 's/\\$$//' < $*.d.tmp | fmt -1 | \
-#@sed -e 's/^ *//' -e 's/$$/:/' >> $*.d
-#@rm -f $*.d.tmp
-#-include $(OBJECTS:.o=.d)
+	cc $*.c -MM $(shell echo "$(CFLAGS)" | sed -e 's/\-arch [^ ]*//g') > $*.d
+	@mv -f $*.d $*.d.tmp
+	@sed -e 's|.*:|$*.o:|' < $*.d.tmp > $*.d
+	@sed -e 's/.*://' -e 's/\\$$//' < $*.d.tmp | fmt -1 | \
+	    sed -e 's/^ *//' -e 's/$$/:/' >> $*.d
+	@rm -f $*.d.tmp
+-include $(OBJECTS:.o=.d)
+
+#.PHONY: gs_swig_wrap.c
 
 libgraphserver.so: $(OBJECTS)
 	cc -shared -o $@ $(OBJECTS) $(LDFLAGS)
