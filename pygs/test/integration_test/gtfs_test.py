@@ -1,7 +1,7 @@
 import transitfeed
 import sys, os, subprocess
 sys.path = ['..'] + sys.path
-from graphserver.core import Graph, Street, ServicePeriod, TripHopSchedule, ServiceCalendar, State, Wait, WalkOptions
+from graphserver.core import Graph, Street, ServicePeriod, ServiceCalendar, State, Wait, WalkOptions
 from graphserver.engine import Engine
 from graphserver.ext.gtfs import GTFSLoadable
 import graphserver.ext.gtfs

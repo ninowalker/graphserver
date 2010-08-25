@@ -96,7 +96,7 @@ class StressTest(unittest.TestCase):
         
     def test_crossing_destroy(self):
         def func():
-            cr = Crossing(10)
+            cr = Crossing()
             cr.destroy()
             
         grind( func, 100000 )
@@ -117,7 +117,7 @@ class StressTest(unittest.TestCase):
 
     def test_ths_destroy(self):
         """TripHopSchedule.destroy() completely destroys TripHopSchedule"""
-        
+        assert False, "Uses triphop"
         tz = Timezone()
         tz.add_period( TimezonePeriod(0, 100000, 0 ) )
         
@@ -150,7 +150,7 @@ class StressTest(unittest.TestCase):
         
     def test_min_edge_graph_delete(self):
         """Graph.destroy() completely destroys Graph with a smattering of edge payloads"""
-        
+        assert False, "uses triphop"
         tz = Timezone()
         tz.add_period( TimezonePeriod( 0, 100000, 0 ) )
         
@@ -218,7 +218,7 @@ class WaitStressTest(unittest.TestCase):
 class TripHopStressTest(unittest.TestCase):
     def test_triphop_destroy(self):
         """Wait.destroy() completely destroys TripHop"""
-        
+        assert False, "uses triphop"
         tz = Timezone()
         tz.add_period( TimezonePeriod( 0, 100000, 0 ) )
         cal = ServiceCalendar()
@@ -230,9 +230,9 @@ class TripHopStressTest(unittest.TestCase):
             
         grind(func, 1000000)
         
-class DAGStressTest(unittest.TestCase):
+class XDAGStressXTestX(unittest.TestCase):
     
-    def test_dag_destroy(self):
+    def xtestx_dag_destroy(self):
         """completely destroys DAG"""
         
         tz = Timezone()
@@ -280,7 +280,7 @@ class DAGStressTest(unittest.TestCase):
         
 class DeadendStressTest(unittest.TestCase):
     
-    def test_dag_destroy(self):
+    def xtestx_dag_destroy(self):
         """completely destroys DAG"""
         
         tz = Timezone()
