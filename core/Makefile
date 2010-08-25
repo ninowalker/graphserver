@@ -33,9 +33,10 @@ OBJECTS= fibheap/dirfibheap.o \
     path.o \
     vector.o
 
+
 # You know what? Honestly? I don't know what most of these switches do.
-CFLAGS=-g -fno-strict-aliasing -O2 -fPIC -Wall
-LDFLAGS= -L. -Bsymbolic-functions -Wall -ldl -lm -lc
+CFLAGS=-g -fno-strict-aliasing -O2 -fPIC -Wall $(shell python2.6-config --cflags)
+LDFLAGS= -L. -Bsymbolic-functions -Wall -ldl -lm -lc $(shell python2.6-config --ldflags)
 
 OS := $(shell uname)
 
@@ -52,8 +53,10 @@ endif
 # for each source file, ensuring that they are recompiled when the headers
 # they include change
 # see: http://www.cs.berkeley.edu/~smcpeak/autodepend/autodepend.html
+#.PHONY: gs_swig_wrap.c
+
 %.o: %.c
-	cc $*.c -c -o $@ $(CFLAGS)
+	gcc $*.c -c -o $@ $(CFLAGS)
 	cc $*.c -MM $(CFLAGS) > $*.d
 	@mv -f $*.d $*.d.tmp
 	@sed -e 's|.*:|$*.o:|' < $*.d.tmp > $*.d
@@ -64,6 +67,23 @@ endif
 
 libgraphserver.so: $(OBJECTS)
 	cc -shared -o $@ $(OBJECTS) $(LDFLAGS)
+
+_libgraphserver_swig.so: $(OBJECTS) gs_swig_wrap.o gs_swig_wrap.c
+	cc -shared -o $@ $(OBJECTS) gs_swig_wrap.o $(LDFLAGS)
+
+gs_swig_wrap.c: gs_swig.swg $(OBJECTS:.o=.h)
+	/usr/local/bin/swig -python gs_swig.swg
+
+java: gs_swig.swg $(OBJECTS:.o=.h)
+	cp gs_swig.swg gs_swig_java.swg
+	/usr/local/bin/swig -java gs_swig_java.swg
+	gcc gs_swig_java_wrap.c -c -o gs_swig_java_wrap.o $(CFLAGS) -I/System/Library/Frameworks/JavaVM.framework/Headers 
+	cc -shared -o libgs_swig_java.dylib $(OBJECTS) gs_swig_java_wrap.o $(LDFLAGS)
+	javac *.java
+	
+
+
+allswig: _libgraphserver_swig.so
 
 install:
 	cp libgraphserver.so $(PREFIX)/lib

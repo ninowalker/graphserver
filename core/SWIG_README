@@ -1,0 +1,7 @@
+The swig bindings were tested heavily initially but were abandon because Python ctypes is more performant. However, this may still prove a useful starting point for other languages.
+ 
+ % make allswig
+ % sudo easy_install2.6 nose
+ % /Library/Frameworks/Python.framework/Versions/2.6/bin/nosetests test_swig.py 
+
+This work was done on OSX 10.5 with Swig: SWIG Version 1.3.31
