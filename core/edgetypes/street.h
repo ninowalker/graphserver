@@ -5,6 +5,7 @@
 
 struct Street {
    edgepayload_t type;
+   long external_id;
    State* (*walk)(struct EdgePayload*, struct State*, struct WalkOptions*);
    State* (*walkBack)(struct EdgePayload*, struct State*, struct WalkOptions*);
     
@@ -14,13 +15,15 @@ struct Street {
    float fall;
    float slog;
    long way;
+    
+   int reverse_of_source;
 };
 
 Street*
-streetNew(const char *name, double length);
+streetNew(const char *name, double length, int reverse_of_source);
 
 Street*
-streetNewElev(const char *name, double length, float rise, float fall);
+streetNewElev(const char *name, double length, float rise, float fall, int reverse_of_source);
 
 void
 streetDestroy(Street* tokill);
@@ -60,5 +63,7 @@ streetGetSlog(Street* this);
 void
 streetSetSlog(Street* this, float slog);
 
+int
+streetGetReverseOfSource(Street* this) ;
 
 #endif

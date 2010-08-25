@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../core/graph.h"
+#include "../graphserver.h"
+#include "../graph.h"
 #include <valgrind/callgrind.h>
 
 int main() {
@@ -12,8 +13,8 @@ int main() {
     vLink(v1, v2, (EdgePayload*)origlink);
     vSetParent(v2, v1, (EdgePayload*)linkNew()); //results in invalid write
     
-    vDestroy(v1, 1, 1);
-    vDestroy(v2, 1, 1);
+    vDestroy(v1, 1);
+    vDestroy(v2, 1);
     linkDestroy(origlink);
     
     return 1;

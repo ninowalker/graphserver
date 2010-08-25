@@ -5,6 +5,10 @@ struct Graph {
    struct hashtable* vertices;
 };
 
+struct ShortestPathTree {
+   struct hashtable* vertices;
+};
+
 //for shortest path trees
 struct prev_entry {
   char* from;
@@ -22,14 +26,25 @@ struct Vertex {
    ListNode* outgoing;
    ListNode* incoming;
    char* label;
-   State* payload;
+    
+   int deleted_neighbors;
+} ;
+
+struct SPTVertex {
+   int degree_out;
+   int degree_in;
+   ListNode* outgoing;
+   ListNode* incoming;
+   char* label;
+   State* state;
+   int hop;
+   Vertex *mirror;
 } ;
 
 struct Edge {
   Vertex* from;
   Vertex* to;
   EdgePayload* payload;
-  long thickness;
   int enabled;
 } ;
 
@@ -39,13 +54,16 @@ Graph*
 gNew();
 
 void
-gDestroy( Graph* this, int free_vertex_payloads, int free_edge_payloads );
+gDestroyBasic( Graph* this, int free_edge_payloads );
+
+void
+gDestroy( Graph* this );
 
 Vertex*
 gAddVertex( Graph* this, char *label );
 
 void
-gRemoveVertex( Graph* this, char *label, int free_vertex_payload, int free_edge_payloads );
+gRemoveVertex( Graph* this, char *label, int free_edge_payloads );
 
 Vertex*
 gGetVertex( Graph* this, char *label );
@@ -59,24 +77,47 @@ gAddEdge( Graph* this, char *from, char *to, EdgePayload *payload );
 Vertex**
 gVertices( Graph* this, long* num_vertices );
 
-Graph*
-gShortestPathTree( Graph* this, char *from, char *to, State* init_state, WalkOptions* options, long maxtime );
+ShortestPathTree*
+gShortestPathTree( Graph* this, char *from, char *to, State* init_state, WalkOptions* options, long maxtime, int hoplimit, long weightlimit );
 
-Graph*
-gShortestPathTreeRetro( Graph* this, char *from, char *to, State* init_state, WalkOptions* options, long mintime );
+ShortestPathTree*
+gShortestPathTreeRetro( Graph* this, char *from, char *to, State* init_state, WalkOptions* options, long mintime, int hoplimit, long weightlimit );
 
 //direction specifies forward or retro routing
 State*
-gShortestPath( Graph* this, char *from, char *to, State* init_state, int direction, long *size, WalkOptions* options, long timelimit );
+gShortestPath( Graph* this, char *from, char *to, State* init_state, int direction, long *size, WalkOptions* options, long timelimit, int hoplimit, long weightlimit );
 
 long
 gSize( Graph* this );
 
 void
-gSetThicknesses( Graph* this, char *root_label );
+gSetVertexEnabled( Graph *this, char *label, int enabled );
+
+//SPT METHODS
+
+ShortestPathTree*
+sptNew();
 
 void
-gSetVertexEnabled( Graph *this, char *label, int enabled );
+sptDestroy( ShortestPathTree *this );
+
+SPTVertex*
+sptAddVertex( ShortestPathTree *this, Vertex *mirror, int hop );
+
+void
+sptRemoveVertex( ShortestPathTree *this, char *label );
+
+SPTVertex*
+sptGetVertex( ShortestPathTree *this, char *label );
+
+Edge*
+sptAddEdge( ShortestPathTree *this, char *from, char *to, EdgePayload *payload );
+
+SPTVertex**
+sptVertices( ShortestPathTree *this, long* num_vertices );
+
+long
+sptSize( ShortestPathTree* this );
 
 Path *
 sptPathRetro(Graph* g, char* origin_label);
@@ -87,7 +128,7 @@ Vertex *
 vNew( char* label ) ;
 
 void
-vDestroy(Vertex* this, int free_vertex_payload, int free_edge_payloads) ;
+vDestroy(Vertex* this, int free_edge_payloads) ;
 
 // TODO
 //void
@@ -120,8 +161,52 @@ vDegreeOut( Vertex* this );
 int
 vDegreeIn( Vertex* this );
 
+//SPTVERTEX FUNCTIONS
+
+SPTVertex *
+sptvNew( Vertex* mirror, int hop ) ;
+
+void
+sptvDestroy(SPTVertex* this) ;
+
+Edge*
+sptvLink(SPTVertex* this, SPTVertex* to, EdgePayload* payload) ;
+
+Edge*
+sptvSetParent( SPTVertex* this, SPTVertex* parent, EdgePayload* payload );
+
+inline ListNode*
+sptvGetOutgoingEdgeList( SPTVertex* this );
+
+inline ListNode*
+sptvGetIncomingEdgeList( SPTVertex* this );
+
+void
+sptvRemoveOutEdgeRef( SPTVertex* this, Edge* todie );
+
+void
+sptvRemoveInEdgeRef( SPTVertex* this, Edge* todie );
+
+char*
+sptvGetLabel( SPTVertex* this );
+
+int
+sptvDegreeOut( SPTVertex* this );
+
+int
+sptvDegreeIn( SPTVertex* this );
+
 State*
-vPayload( Vertex* this );
+sptvState( SPTVertex* this );
+
+int
+sptvHop( SPTVertex* this );
+
+Edge*
+sptvGetParent( SPTVertex* this );
+
+Vertex*
+sptvMirror( SPTVertex* this );
 
 //EDGE FUNCTIONS
 
@@ -155,11 +240,5 @@ eGetEnabled(Edge *this);
 
 void
 eSetEnabled(Edge *this, int enabled);
-
-long
-eGetThickness(Edge *this);
-
-void
-eSetThickness(Edge *this, long thickness);
 
 #endif

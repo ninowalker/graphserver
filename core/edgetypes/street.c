@@ -2,8 +2,9 @@
 
 //STREET FUNCTIONS
 Street*
-streetNew(const char *name, double length) {
+streetNew(const char *name, double length, int reverse_of_source) {
   Street* ret = (Street*)malloc(sizeof(Street));
+  ret->external_id = 0;
   ret->type = PL_STREET;
   ret->name = (char*)malloc((strlen(name)+1)*sizeof(char));
   strcpy(ret->name, name);
@@ -12,6 +13,7 @@ streetNew(const char *name, double length) {
   ret->fall = 0;
   ret->slog = 1;
   ret->way = 0;
+  ret->reverse_of_source = reverse_of_source;
     
   //bind functions to methods
   ret->walk = &streetWalk;
@@ -21,8 +23,8 @@ streetNew(const char *name, double length) {
 }
 
 Street*
-streetNewElev(const char *name, double length, float rise, float fall) {
-    Street* ret = streetNew( name, length );
+streetNewElev(const char *name, double length, float rise, float fall, int reverse_of_source) {
+    Street* ret = streetNew( name, length, reverse_of_source );
     ret->rise = rise;
     ret->fall = fall;
     return ret;
@@ -82,6 +84,11 @@ streetGetWay(Street* this) {
 void
 streetSetWay(Street* this, long way) {
     this->way = way;
+}
+
+int
+streetGetReverseOfSource( Street *this ) {
+    return this->reverse_of_source;
 }
 
 #ifndef EDGEWEIGHTS_FIRSTTHROUGH

@@ -3,6 +3,7 @@
 
 #define ABSOLUTE_MAX_WALK 1000000 //meters. 100 km. prevents overflow
 #define MAX_LONG 2147483647
+#define INFINITY MAX_LONG
 #define SECS_IN_DAY 86400
 #define TRUE 1
 #define FALSE 0
@@ -19,6 +20,8 @@ typedef struct ListNode ListNode;
 typedef struct Graph Graph;
 typedef struct Path Path;
 typedef struct Vector Vector;
+typedef struct SPTVertex SPTVertex;
+typedef struct ShortestPathTree ShortestPathTree;
 
 // classes that support edgetypes
 typedef struct ServicePeriod ServicePeriod;
@@ -40,6 +43,8 @@ typedef struct Crossing Crossing;
 typedef struct Alight Alight;
 typedef struct PayloadMethods PayloadMethods;
 typedef struct CustomPayload CustomPayload;
+typedef struct TripAlight TripAlight;
+typedef struct Combination Combination;
 
 typedef enum {    
   PL_STREET,
@@ -56,7 +61,8 @@ typedef enum {
   PL_HEADWAYBOARD,
   PL_EGRESS,
   PL_HEADWAYALIGHT,
-  PL_ELAPSE_TIME
+  PL_ELAPSE_TIME,
+  PL_COMBINATION
 } edgepayload_t;
 
 #include "state.h"
@@ -73,8 +79,9 @@ typedef enum {
 #include "edgetypes/headwayboard.h"
 #include "edgetypes/headwayalight.h"
 #include "edgetypes/crossing.h"
-#include "edgetypes/alight.h"
+#include "edgetypes/tripalight.h"
 #include "edgetypes/custompayload.h"
+#include "edgetypes/combination.h"
 #include "edgepayload.h"
 #include "list.h"
 #include "servicecalendar.h"

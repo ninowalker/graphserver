@@ -24,14 +24,17 @@ OBJECTS= fibheap/dirfibheap.o \
     edgetypes/headwayboard.o \
     edgetypes/headwayalight.o \
     edgetypes/crossing.o \
-    edgetypes/alight.o \
+    edgetypes/tripalight.o \
     edgetypes/custompayload.o \
+    edgetypes/combination.o \
     edgepayload.o \
     list.o \
     servicecalendar.o \
     timezone.o \
     path.o \
-    vector.o
+    vector.o \
+    contraction.o \
+    heap.o
 
 
 # You know what? Honestly? I don't know what most of these switches do.

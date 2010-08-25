@@ -28,18 +28,8 @@ class TestGraph(unittest.TestCase):
         g = Graph()
         g.add_vertex( "A" )
         g.get_vertex( "A" ).label == "A"
-        g.remove_vertex( "A", True, True )
+        g.remove_vertex( "A" )
         assert g.get_vertex( "A" ) == None
-        
-        g.add_vertex( "A" )
-        g.add_vertex( "B" )
-        pl = Street( "AB", 1 )
-        g.add_edge( "A", "B", pl )
-        g.remove_vertex( "A", True, False )
-        assert pl.name == "AB"
-        assert g.get_vertex( "A" ) == None
-        assert g.get_vertex( "B" ).label == "B"
-        
         
     def test_double_add_vertex(self):
         g = Graph()
@@ -73,7 +63,7 @@ class TestGraph(unittest.TestCase):
         assert e
         assert e.from_v.label == "home"
         assert e.to_v.label == "work"
-        assert str(e)=="<Edge><Street name='helloworld' length='1.000000' rise='0.000000' fall='0.000000' way='0'/></Edge>"
+        assert str(e)=="<Edge><Street name='helloworld' length='1.000000' rise='0.000000' fall='0.000000' way='0' reverse='False'/></Edge>"
         
         g.destroy()
     
@@ -119,10 +109,10 @@ class TestGraph(unittest.TestCase):
         assert spt.__class__ == ShortestPathTree
         assert spt.get_vertex("home").degree_out==1
         assert spt.get_vertex("home").degree_in==0
-        assert spt.get_vertex("home").payload.weight==0
+        assert spt.get_vertex("home").state.weight==0
         assert spt.get_vertex("work").degree_in==1
         assert spt.get_vertex("work").degree_out==0
-        self.assertTrue( spt.get_vertex("work").payload.weight > 0 )
+        self.assertTrue( spt.get_vertex("work").state.weight > 0 )
         
         spt.destroy()
         g.destroy()
@@ -164,10 +154,10 @@ class TestGraph(unittest.TestCase):
         assert spt.__class__ == ShortestPathTree
         self.assertEqual( spt.get_vertex("home").degree_out , 0 )
         self.assertEqual( spt.get_vertex("home").degree_in , 1 )
-        self.assertTrue( spt.get_vertex("home").payload.weight > 0 )
+        self.assertTrue( spt.get_vertex("home").state.weight > 0 )
         self.assertEqual( spt.get_vertex("work").degree_in , 0 )
         self.assertEqual( spt.get_vertex("work").degree_out , 1 )
-        self.assertEqual( spt.get_vertex("work").payload.weight , 0 )
+        self.assertEqual( spt.get_vertex("work").state.weight , 0 )
         
         spt.destroy()
         g.destroy()
@@ -186,7 +176,7 @@ class TestGraph(unittest.TestCase):
         
         spt = g.shortest_path_tree_retro( "A", "D", State(g.numagencies,1000), WalkOptions() )
         
-        assert spt.get_vertex( "A" ).payload.time
+        assert spt.get_vertex( "A" ).state.time
         
         spt.destroy()
         
@@ -343,14 +333,62 @@ class TestGraph(unittest.TestCase):
         wo = WalkOptions()
         wo.walking_speed = 1
         spt = g.shortest_path_tree( "A", None, State(1,0), wo )
-        spt.set_thicknesses( "A" )
-        
-        for edge in spt.get_vertex( "A" ).outgoing:
-            if edge.to_v.label == "B":
-                assert edge.thickness == 10
-            elif edge.to_v.label == "C":
-                assert edge.thickness == 30
 
+    def test_hop_limit(self):
+        gg = Graph()
+        gg.add_vertex( "A" )
+        gg.add_vertex( "B" )
+        gg.add_vertex( "C" )
+        gg.add_vertex( "D" )
+        gg.add_vertex( "E" )
+        gg.add_edge( "A", "B", Street( "AB", 1 ) )
+        gg.add_edge( "B", "C", Street( "BC", 1 ) )
+        gg.add_edge( "C", "D", Street( "CD", 1 ) )
+        gg.add_edge( "D", "E", Street( "DE", 1 ) )
         
+        spt = gg.shortest_path_tree( "A", "E", State(0,0), WalkOptions() )
+        assert spt.get_vertex( "E" ).state.weight == 0
+        spt.destroy()
+        
+        spt = gg.shortest_path_tree( "A", "E", State(0,0), WalkOptions(), hoplimit=1 )
+        assert spt.get_vertex("A") != None
+        assert spt.get_vertex("B") != None
+        assert spt.get_vertex("C") == None
+        assert spt.get_vertex("D") == None
+        assert spt.get_vertex("E") == None
+        
+        spt = gg.shortest_path_tree( "A", "E", State(0,0), WalkOptions(), hoplimit=3 )
+        assert spt.get_vertex("A") != None
+        assert spt.get_vertex("B") != None
+        assert spt.get_vertex("C") != None
+        assert spt.get_vertex("D") != None
+        assert spt.get_vertex("E") == None
+        
+    def test_traverse(self):
+        gg = Graph()
+        gg.add_vertex( "A" )
+        gg.add_vertex( "B" )
+        gg.add_vertex( "C" )
+        gg.add_edge( "A", "B", Street("AB", 1) )
+        gg.add_edge( "A", "C", Street("AC", 1) )
+        
+        vv = gg.get_vertex( "A" )
+        assert [ee.payload.name for ee in vv.outgoing] == ["AC", "AB"]
+            
+    def test_ch(self):
+        gg = Graph()
+        gg.add_vertex( "A" )
+        gg.add_vertex( "B" )
+        ab = gg.add_edge( "A", "B", Street( "AB", 1 ) )
+        ba = gg.add_edge( "B", "A", Street( "BA", 1 ) )
+        
+        absoul = gg.get_vertex("A").outgoing[0].payload.soul
+        basoul = gg.get_vertex("B").outgoing[0].payload.soul
+        
+        ch = gg.get_contraction_hierarchies( WalkOptions() )
+        
+        assert ch.upgraph.get_vertex("A").outgoing[0].payload.soul == absoul
+        assert ch.downgraph.get_vertex("B").outgoing[0].payload.soul == basoul
+
 if __name__ == '__main__':    
     unittest.main()

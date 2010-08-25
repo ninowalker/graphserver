@@ -1,8 +1,8 @@
 try:
-    from graphserver.gsdll import lgs, cproperty, ccast, CShadow, instantiate, PayloadMethodTypes
+    from graphserver.gsdll import libc, lgs, cproperty, ccast, CShadow, instantiate, PayloadMethodTypes
 except ImportError:
     #so I can run this script from the same folder
-    from gsdll import lgs, cproperty, ccast, CShadow, instantiate, PayloadMethodTypes
+    from gsdll import libc, lgs, cproperty, ccast, CShadow, instantiate, PayloadMethodTypes
 from ctypes import string_at, byref, c_int, c_long, c_size_t, c_char_p, c_double, c_void_p, py_object, c_float
 from ctypes import Structure, pointer, cast, POINTER, addressof
 from _ctypes import Py_INCREF, Py_DECREF
@@ -127,10 +127,10 @@ class Graph(CShadow):
         
         return self._cadd_vertex(self.soul, label)
         
-    def remove_vertex(self, label, free_vertex_payload, free_edge_payload):
+    def remove_vertex(self, label, free_edge_payloads=True):
         #void gRemoveVertex( Graph* this, char *label, int free_vertex_payload, int free_edge_payloads );
         
-        return self._cremove_vertex(self.soul, label, free_vertex_payload, free_edge_payload)
+        return self._cremove_vertex(self.soul, label, free_edge_payloads)
         
     def get_vertex(self, label):
         #Vertex* gGetVertex( Graph* this, char *label );
@@ -167,6 +167,8 @@ class Graph(CShadow):
         for i in range(count.value):
             v = Vertex.from_pointer(arr[i])
             verts.append(v)
+        del arr
+        libc.free(p_va)
         return verts
     
     def add_vertices(self, vs):
@@ -187,7 +189,7 @@ class Graph(CShadow):
                 edges.append(e)
         return edges    
     
-    def shortest_path_tree(self, fromv, tov, initstate, walk_options=None, maxtime=2000000000):
+    def shortest_path_tree(self, fromv, tov, initstate, walk_options=None, maxtime=2000000000, hoplimit=1000000, weightlimit=2000000000):
         #Graph* gShortestPathTree( Graph* this, char *from, char *to, State* init_state )
         self.check_destroyed()
         if not tov:
@@ -195,13 +197,13 @@ class Graph(CShadow):
         
         if walk_options is None:
             walk_options = WalkOptions()
-            ret = self._cshortest_path_tree( self.soul, fromv, tov, initstate.soul, walk_options.soul, c_long(maxtime) )
+            ret = self._cshortest_path_tree( self.soul, fromv, tov, initstate.soul, walk_options.soul, c_long(maxtime), c_int(hoplimit), c_long(weightlimit) )
             walk_options.destroy()
             return ret
         else:
-            return self._cshortest_path_tree( self.soul, fromv, tov, initstate.soul, walk_options.soul, c_long(maxtime) )
+            return self._cshortest_path_tree( self.soul, fromv, tov, initstate.soul, walk_options.soul, c_long(maxtime), c_int(hoplimit), c_long(weightlimit) )
         
-    def shortest_path_tree_retro(self, fromv, tov, finalstate, walk_options=None, mintime=0):
+    def shortest_path_tree_retro(self, fromv, tov, finalstate, walk_options=None, mintime=0, hoplimit=1000000, weightlimit=2000000000):
         #Graph* gShortestPathTree( Graph* this, char *from, char *to, State* init_state )
         self.check_destroyed()
         if not fromv:
@@ -209,11 +211,11 @@ class Graph(CShadow):
             
         if walk_options is None:
             walk_options = WalkOptions()
-            ret = self._cshortest_path_tree_retro( self.soul, fromv, tov, finalstate.soul, walk_options.soul, c_long(mintime) )
+            ret = self._cshortest_path_tree_retro( self.soul, fromv, tov, finalstate.soul, walk_options.soul, c_long(mintime), c_int(hoplimit), c_long(weightlimit) )
             walk_options.destroy()
             return ret
         else:
-            return self._cshortest_path_tree_retro( self.soul, fromv, tov, finalstate.soul, walk_options.soul, c_long(mintime) )
+            return self._cshortest_path_tree_retro( self.soul, fromv, tov, finalstate.soul, walk_options.soul, c_long(mintime), c_int(hoplimit), c_long(weightlimit) )
 
     def to_dot(self):
         self.check_destroyed()
@@ -222,8 +224,121 @@ class Graph(CShadow):
         for e in self.edges:
             ret += "    %s -> %s;\n" % (e.from_v.label, e.to_v.label)
         return ret + "}"
+        
+    def get_contraction_hierarchies( self, walk_options, search_limit=1 ):
+        return self._get_ch( self.soul, walk_options.soul, search_limit )
+        
+class ContractionHierarchy(CShadow):
+    
+    upgraph = cproperty(lgs.chUpGraph, c_void_p, Graph)
+    downgraph = cproperty(lgs.chDownGraph, c_void_p, Graph)
+    
+    def __init__(self):
+        self.soul = lgs.chNew( )
+        
+    def shortest_path(self, fromv_label, tov_label, init_state, walk_options ):
+        # GET UPGRAPH AND DOWNGRAPH SPTS
+        sptup = self.upgraph.shortest_path_tree( fromv_label, None, init_state, walk_options )
+        sptdown = self.downgraph.shortest_path_tree_retro( None, tov_label, State(0,10000000), walk_options )
+        
+        # FIND SMALLEST MEETUP VERTEX
+        meetup_vertices = []
+        for upvv in sptup.vertices:
+            downvv = sptdown.get_vertex( upvv.label )
+            if downvv is not None:
+                meetup_vertices.append( (upvv.state.weight + downvv.state.weight, upvv.label ) )
+        min_meetup = min(meetup_vertices)[1]
+        
+        # GET AND JOIN PATHS TO MEETUP VERTEX
+        upvertices, upedges = sptup.path( min_meetup )
+        downvertices, downedges = sptdown.path_retro( min_meetup )
+        
+        vertices = upvertices+downvertices[1:]
+        edges = upedges+downedges
+        
+        ret = [ee.payload for ee in edges]
+                
+        sptup.destroy()
+        sptdown.destroy()
+            
+        return ret
 
-class ShortestPathTree(Graph):
+class ShortestPathTree(CShadow):
+    
+    size = cproperty(lgs.sptSize, c_long)
+    
+    def __init__(self, numagencies=1):
+        self.soul = self._cnew()
+        self.numagencies = numagencies #a central point that keeps track of how large the list of calendards need ot be in the state variables.
+        
+    def destroy(self):
+        self.check_destroyed()
+        
+        self._cdel(self.soul)
+        self.soul = None
+            
+    def add_vertex(self, shadow):
+        #Vertex* sptAddVertex( ShortestPathTree* this, char *label );
+        self.check_destroyed()
+        
+        return self._cadd_vertex(self.soul, shadow.soul)
+        
+    def remove_vertex(self, label):
+        #void sptRemoveVertex( ShortestPathTree* this, char *label, int free_vertex_payload, int free_edge_payloads );
+        
+        return self._cremove_vertex(self.soul, label)
+        
+    def get_vertex(self, label):
+        #Vertex* sptGetVertex( ShortestPathTree* this, char *label );
+        self.check_destroyed()
+        
+        return self._cget_vertex(self.soul, label)
+        
+    def add_edge( self, fromv, tov, payload ):
+        #Edge* sptAddEdge( ShortestPathTree* this, char *from, char *to, EdgePayload *payload );
+        self.check_destroyed()
+        
+        e = self._cadd_edge( self.soul, fromv, tov, payload.soul )
+        
+        if e != None: return e
+
+        if not self.get_vertex(fromv):
+            raise VertexNotFoundError(fromv)
+        raise VertexNotFoundError(tov)
+        
+    @property
+    def vertices(self):
+        self.check_destroyed()
+        
+        count = c_int()
+        p_va = lgs.sptVertices(self.soul, byref(count))
+        verts = []
+        arr = cast(p_va, POINTER(c_void_p)) # a bit of necessary voodoo
+        for i in range(count.value):
+            v = SPTVertex.from_pointer(arr[i])
+            verts.append(v)
+        return verts
+    
+    @property
+    def edges(self):
+        self.check_destroyed()
+        
+        edges = []
+        for vertex in self.vertices:
+            o = vertex.outgoing
+            if not o: continue
+            for e in o:
+                edges.append(e)
+        return edges    
+
+    def to_dot(self):
+        self.check_destroyed()
+        
+        ret = "digraph G {"
+        for e in self.edges:
+            ret += "    %s -> %s;\n" % (e.from_v.label, e.to_v.label)
+        return ret + "}"
+    
     def path(self, destination):
         path_vertices, path_edges = self.path_retro(destination)
         
@@ -248,13 +363,6 @@ class ShortestPathTree(Graph):
         path.destroy()
         
         return (vertices, edges)
-        
-    def set_thicknesses(self, root_label):
-        lgs.gSetThicknesses( c_void_p(self.soul), c_char_p(root_label) )
-
-    def destroy(self):
-        #destroy the vertex State instances, but not the edge EdgePayload instances, as they're owned by the parent graph
-        super(ShortestPathTree, self).destroy(1, 0)
 
 class EdgePayload(CShadow, Walkable):
     def __init__(self):
@@ -275,6 +383,7 @@ class EdgePayload(CShadow, Walkable):
         return "<abstractedgepayload type='%s'/>" % self.type
     
     type = cproperty(lgs.epGetType, c_int)
+    external_id = cproperty(lgs.epGetExternalId, c_long, setter=lgs.epSetExternalId)
     
     @classmethod
     def from_pointer(cls, ptr):
@@ -390,11 +499,44 @@ class WalkOptions(CShadow):
     max_walk = cproperty(lgs.woGetMaxWalk, c_int, setter=lgs.woSetMaxWalk)
     walking_overage = cproperty(lgs.woGetWalkingOverage, c_float, setter=lgs.woSetWalkingOverage)
 
+class Edge(CShadow, Walkable):
+    def __init__(self, from_v, to_v, payload):
+        #Edge* eNew(Vertex* from, Vertex* to, EdgePayload* payload);
+        self.soul = self._cnew(from_v.soul, to_v.soul, payload.soul)
+    
+    def __str__(self):
+        return self.to_xml()
+        
+    def to_xml(self):
+        return "<Edge>%s</Edge>" % (self.payload)
+        
+    @property
+    def from_v(self):
+        return self._cfrom_v(self.soul)
+        
+    @property
+    def to_v(self):
+        return self._cto_v(self.soul)
+        
+    @property
+    def payload(self):
+        return self._cpayload(self.soul)
+        
+    def walk(self, state, walk_options):
+        return self._cwalk(self.soul, state.soul, walk_options.soul)
+        
+    enabled = cproperty(lgs.eGetEnabled, c_int, setter=lgs.eSetEnabled)
+    
+class SPTEdge(Edge):
+    def to_xml(self):
+        return "<SPTEdge>%s</SPTEdge>" % (self.payload)
+
 class Vertex(CShadow):
     
     label = cproperty(lgs.vGetLabel, c_char_p)
     degree_in = cproperty(lgs.vDegreeIn, c_int)
     degree_out = cproperty(lgs.vDegreeOut, c_int)
+    edgeclass = Edge
     
     def __init__(self,label):
         self.soul = self._cnew(label)
@@ -424,11 +566,6 @@ class Vertex(CShadow):
     def incoming(self):
         self.check_destroyed()
         return self._edges(self._cincoming_edges)
-    
-    @property
-    def payload(self):
-        self.check_destroyed()
-        return self._cpayload(self.soul)
 
     def _edges(self, method, index = -1):
         self.check_destroyed()
@@ -442,8 +579,82 @@ class Vertex(CShadow):
         i = 0
         while node:
             if index != -1 and i == index:
-                return node.data
-            e.append(node.data)
+                return node.data(edgeclass=self.edgeclass)
+            e.append(node.data(edgeclass=self.edgeclass))
+            node = node.next
+            i = i+1
+        if index == -1:
+            return e
+        return None
+
+    def get_outgoing_edge(self,i):
+        self.check_destroyed()
+        return self._edges(self._coutgoing_edges, i)
+        
+    def get_incoming_edge(self,i):
+        self.check_destroyed()
+        return self._edges(self._cincoming_edges, i)
+        
+    def __hash__(self):
+        return int(self.soul)
+        
+class SPTVertex(CShadow):
+    
+    label = cproperty(lgs.sptvGetLabel, c_char_p)
+    degree_in = cproperty(lgs.sptvDegreeIn, c_int)
+    degree_out = cproperty(lgs.sptvDegreeOut, c_int)
+    hop = cproperty(lgs.sptvHop, c_int)
+    mirror = cproperty(lgs.sptvMirror, c_void_p, Vertex )
+    edgeclass = SPTEdge
+    
+    def __init__(self,mirror,hop=0):
+        self.soul = self._cnew(mirror.soul,hop)
+        
+    def destroy(self):
+        #void vDestroy(Vertex* this, int free_vertex_payload, int free_edge_payloads) ;
+        # TODO - support parameterization?
+        
+        self.check_destroyed()
+        self._cdel(self.soul, 1, 1)
+        self.soul = None
+    
+    def to_xml(self):
+        self.check_destroyed()
+        return "<SPTVertex degree_out='%s' degree_in='%s' label='%s'/>" % (self.degree_out, self.degree_in, self.label)
+    
+    def __str__(self):
+        self.check_destroyed()
+        return self.to_xml()
+
+    @property
+    def outgoing(self):
+        self.check_destroyed()
+        return self._edges(self._coutgoing_edges)
+        
+    @property
+    def incoming(self):
+        self.check_destroyed()
+        return self._edges(self._cincoming_edges)
+    
+    @property
+    def state(self):
+        self.check_destroyed()
+        return self._cstate(self.soul)
+
+    def _edges(self, method, index = -1):
+        self.check_destroyed()
+        e = []
+        node = method(self.soul)
+        if not node: 
+            if index == -1:
+                return e
+            else: 
+                return None
+        i = 0
+        while node:
+            if index != -1 and i == index:
+                return node.data(edgeclass=self.edgeclass)
+            e.append(node.data(edgeclass=self.edgeclass))
             node = node.next
             i = i+1
         if index == -1:
@@ -461,48 +672,16 @@ class Vertex(CShadow):
     def __hash__(self):
         return int(self.soul)
 
-class Edge(CShadow, Walkable):
-    def __init__(self, from_v, to_v, payload):
-        #Edge* eNew(Vertex* from, Vertex* to, EdgePayload* payload);
-        self.soul = self._cnew(from_v.soul, to_v.soul, payload.soul)
-    
-    def __str__(self):
-        return self.to_xml()
-        
-    def to_xml(self):
-        return "<Edge>%s</Edge>" % (self.payload)
-        
-    @property
-    def from_v(self):
-        return self._cfrom_v(self.soul)
-        
-    @property
-    def to_v(self):
-        return self._cto_v(self.soul)
-        
-    @property
-    def payload(self):
-        return self._cpayload(self.soul)
-        
-    def walk(self, state, walk_options):
-        return self._cwalk(self.soul, state.soul, walk_options.soul)
-        
-    thickness = cproperty(lgs.eGetThickness, c_long, setter=lgs.eSetThickness)
-    enabled = cproperty(lgs.eGetEnabled, c_int, setter=lgs.eSetEnabled)
 
 
 class ListNode(CShadow):
-    @property
-    def data(self):
-        return self._cdata(self.soul)
+    
+    def data(self, edgeclass=Edge):
+        return edgeclass.from_pointer( lgs.liGetData(self.soul) )
     
     @property
     def next(self):
         return self._cnext(self.soul)
-
-            
-
-
 
 def failsafe(return_arg_num_on_failure):
     """ Decorator to prevent segfaults during failed callbacks."""
@@ -883,33 +1062,37 @@ class Street(EdgePayload):
     slog = cproperty(lgs.streetGetSlog, c_float, setter=lgs.streetSetSlog)
     way = cproperty(lgs.streetGetWay, c_long, setter=lgs.streetSetWay)
     
-    def __init__(self,name,length,rise=0,fall=0):
-        self.soul = self._cnew(name, length, rise, fall)
+    def __init__(self,name,length,rise=0,fall=0,reverse_of_source=False):
+        self.soul = self._cnew(name, length, rise, fall,reverse_of_source)
             
     def to_xml(self):
         self.check_destroyed()
         
-        return "<Street name='%s' length='%f' rise='%f' fall='%f' way='%ld'/>" % (self.name, self.length, self.rise, self.fall, self.way)
+        return "<Street name='%s' length='%f' rise='%f' fall='%f' way='%ld' reverse='%s'/>" % (self.name, self.length, self.rise, self.fall, self.way,self.reverse_of_source)
         
     def __getstate__(self):
-        return (self.name, self.length, self.rise, self.fall, self.slog, self.way)
+        return (self.name, self.length, self.rise, self.fall, self.slog, self.way, self.reverse_of_source)
         
     def __setstate__(self, state):
-        name, length, rise, fall, slog, way = state
-        self.__init__(name, length, rise, fall)
+        name, length, rise, fall, slog, way, reverse_of_source = state
+        self.__init__(name, length, rise, fall, reverse_of_source)
         self.slog = slog
         self.way = way
         
     def __repr__(self):
-        return "<Street name='%s' length=%f rise=%f fall=%f way=%ld>"%(self.name, self.length, self.rise, self.fall, self.way)
+        return "<Street name='%s' length=%f rise=%f fall=%f way=%ld reverse=%s>"%(self.name, self.length, self.rise, self.fall, self.way,self.reverse_of_source)
         
     @classmethod
     def reconstitute(self, state, resolver):
-        name, length, rise, fall, slog, way = state
-        ret = Street( name, length, rise, fall )
+        name, length, rise, fall, slog, way, reverse_of_source = state
+        ret = Street( name, length, rise, fall, reverse_of_source )
         ret.slog = slog
         ret.way = way
         return ret
+        
+    @property
+    def reverse_of_source(self):
+        return lgs.streetGetReverseOfSource(self.soul)==1
 
 class Egress(EdgePayload):
     length = cproperty(lgs.egressGetLength, c_double)
@@ -1065,7 +1248,7 @@ class TripBoard(EdgePayload):
         return "<TripBoard />"
         
     def __repr__(self):
-        return "<TripBoard int_sid=%d sid=%s agency=%d calendar=%s timezone=%s boardings=%s>"%(self.int_service_id, self.calendar.get_service_id_string(self.int_service_id), self.agency, self.calendar.soul,self.timezone.soul,[self.get_boarding(i) for i in range(self.num_boardings)])
+        return "<TripBoard int_sid=%d sid=%s agency=%d calendar=%s timezone=%s boardings=%s>"%(self.int_service_id, self.calendar.get_service_id_string(self.int_service_id), self.agency, hex(self.calendar.soul),hex(self.timezone.soul),[self.get_boarding(i) for i in range(self.num_boardings)])
         
     def __getstate__(self):
         state = {}
@@ -1137,8 +1320,8 @@ class HeadwayBoard(EdgePayload):
         self.soul = self._cnew(service_id, calendar.soul, timezone.soul, agency, trip_id, start_time, end_time, headway_secs)
         
     def __repr__(self):
-        return "<HeadwayBoard calendar=%d timezone=%d agency=%d service_id=%d trip_id=\"%s\" start_time=%d end_time=%d headway_secs=%d>"%(self.calendar.soul,
-                                                                                                                                          self.timezone.soul,
+        return "<HeadwayBoard calendar=%s timezone=%s agency=%d service_id=%d trip_id=\"%s\" start_time=%d end_time=%d headway_secs=%d>"%(hex(self.calendar.soul),
+                                                                                                                                          hex(self.timezone.soul),
                                                                                                                                           self.agency,
                                                                                                                                           self.int_service_id,
                                                                                                                                           self.trip_id,
@@ -1197,8 +1380,8 @@ class HeadwayAlight(EdgePayload):
         self.soul = self._cnew(service_id, calendar.soul, timezone.soul, agency, trip_id, start_time, end_time, headway_secs)
         
     def __repr__(self):
-        return "<HeadwayAlight calendar=%d timezone=%d agency=%d service_id=%d trip_id=\"%s\" start_time=%d end_time=%d headway_secs=%d>"%(self.calendar.soul,
-                                                                                                                                          self.timezone.soul,
+        return "<HeadwayAlight calendar=%s timezone=%s agency=%d service_id=%d trip_id=\"%s\" start_time=%d end_time=%d headway_secs=%d>"%(hex(self.calendar.soul),
+                                                                                                                                          hex(self.timezone.soul),
                                                                                                                                           self.agency,
                                                                                                                                           self.int_service_id,
                                                                                                                                           self.trip_id,
@@ -1292,8 +1475,59 @@ class Crossing(EdgePayload):
             ret.append( "%s: %s"%(trip_id, crossing_time) )
             
         return "\n".join( ret )
+
+    def __repr__(self):
+        return "<Crossing %s>"%list(self.get_all_crossings())
         
-class Alight(EdgePayload):
+class Combination(EdgePayload):
+    
+    n = cproperty( lgs.comboN, c_int )
+    
+    def __init__(self, cap):
+        self.soul = self._cnew(cap)
+        
+    def add(self, ep):
+        lgs.comboAdd( self.soul, ep.soul )
+        
+    def get(self, i):
+        return EdgePayload.from_pointer( lgs.comboGet( self.soul, i ) )
+        
+    def to_xml(self):
+        self.check_destroyed()
+        return "<Combination n=%d />"%self.n
+        
+    def __getstate__(self):
+        return [ self.get( i ).soul for i in range(self.n) ]
+    
+    @classmethod
+    def reconstitute(cls, state, graphdb):
+        components = [ graphdb.get_edge_payload( epid ) for epid in state ]
+        
+        ret = Combination(len(components))
+        
+        for component in components:
+            ret.add( component )
+            
+        return ret
+        
+    @property
+    def components(self):
+        for i in range(self.n):
+            yield self.get( i )
+        
+    def unpack(self):
+        components_unpacked = []
+        for component_to_unpack in self.components:
+            if component_to_unpack.__class__ == Combination:
+                components_unpacked.append( component_to_unpack.unpack() )
+            else:
+                components_unpacked.append( [component_to_unpack] )
+        return reduce( lambda x,y:x+y, components_unpacked )
+        
+    def expound(self):
+        return "\n".join( [str(x) for x in self.unpack()] )
+        
+class TripAlight(EdgePayload):
     calendar = cproperty( lgs.alGetCalendar, c_void_p, ServiceCalendar )
     timezone = cproperty( lgs.alGetTimezone, c_void_p, Timezone )
     agency = cproperty( lgs.alGetAgency, c_int )
@@ -1348,10 +1582,10 @@ class Alight(EdgePayload):
         return self.get_alighting( alighting_index )
         
     def to_xml(self):
-        return "<Alight/>"
+        return "<TripAlight/>"
         
     def __repr__(self):
-        return "<Alight int_sid=%d agency=%d calendar=%s timezone=%s alightings=%s>"%(self.int_service_id, self.agency, self.calendar.soul,self.timezone.soul,[self.get_alighting(i) for i in range(self.num_alightings)])
+        return "<TripAlight int_sid=%d agency=%d calendar=%s timezone=%s alightings=%s>"%(self.int_service_id, self.agency, hex(self.calendar.soul),hex(self.timezone.soul),[self.get_alighting(i) for i in range(self.num_alightings)])
         
     def __getstate__(self):
         state = {}
@@ -1376,7 +1610,7 @@ class Alight(EdgePayload):
         int_sid = state['int_sid']
         agency = state['agency']
         
-        ret = Alight(int_sid, calendar, timezone, agency)
+        ret = TripAlight(int_sid, calendar, timezone, agency)
         
         for trip_id, arrival, stop_sequence in state['alightings']:
             ret.add_alighting( trip_id, arrival, stop_sequence )
@@ -1390,7 +1624,7 @@ class Alight(EdgePayload):
             trip_id, arrival_secs, stop_sequence = self.get_alighting(i)
             alightingstrs.append( "on trip id='%s' at %s, stop sequence %s"%(trip_id, unparse_secs(arrival_secs), stop_sequence) )
         
-        ret = """Alight
+        ret = """TripAlight
    agency (internal id): %d
    service_id (internal id): %d
    calendar:
@@ -1416,12 +1650,25 @@ Graph._cget_vertex = ccast(lgs.gGetVertex, Vertex)
 Graph._cadd_edge = ccast(lgs.gAddEdge, Edge)
 Graph._cshortest_path_tree = ccast(lgs.gShortestPathTree, ShortestPathTree)
 Graph._cshortest_path_tree_retro = ccast(lgs.gShortestPathTreeRetro, ShortestPathTree)
+Graph._get_ch = ccast( lgs.get_contraction_hierarchies, ContractionHierarchy )
+
+ShortestPathTree._cnew = lgs.sptNew
+ShortestPathTree._cdel = lgs.sptDestroy
+ShortestPathTree._cadd_vertex = ccast(lgs.sptAddVertex, SPTVertex)
+ShortestPathTree._cremove_vertex = lgs.sptRemoveVertex
+ShortestPathTree._cget_vertex = ccast(lgs.sptGetVertex, SPTVertex)
+ShortestPathTree._cadd_edge = ccast(lgs.sptAddEdge, Edge)
 
 Vertex._cnew = lgs.vNew
 Vertex._cdel = lgs.vDestroy
 Vertex._coutgoing_edges = ccast(lgs.vGetOutgoingEdgeList, ListNode)
 Vertex._cincoming_edges = ccast(lgs.vGetIncomingEdgeList, ListNode)
-Vertex._cpayload = ccast(lgs.vPayload, State)
+
+SPTVertex._cnew = lgs.sptvNew
+SPTVertex._cdel = lgs.sptvDestroy
+SPTVertex._coutgoing_edges = ccast(lgs.sptvGetOutgoingEdgeList, ListNode)
+SPTVertex._cincoming_edges = ccast(lgs.sptvGetIncomingEdgeList, ListNode)
+SPTVertex._cstate = ccast(lgs.sptvState, State)
 
 Edge._cnew = lgs.eNew
 Edge._cfrom_v = ccast(lgs.eGetFrom, Vertex)
@@ -1430,9 +1677,16 @@ Edge._cpayload = ccast(lgs.eGetPayload, EdgePayload)
 Edge._cwalk = ccast(lgs.eWalk, State)
 Edge._cwalk_back = lgs.eWalkBack
 
+SPTEdge._cnew = lgs.eNew
+SPTEdge._cfrom_v = ccast(lgs.eGetFrom, SPTVertex)
+SPTEdge._cto_v = ccast(lgs.eGetTo, SPTVertex)
+SPTEdge._cpayload = ccast(lgs.eGetPayload, EdgePayload)
+SPTEdge._cwalk = ccast(lgs.eWalk, State)
+SPTEdge._cwalk_back = lgs.eWalkBack
+
 EdgePayload._subtypes = {0:Street,1:None,2:None,3:Link,4:GenericPyPayload,5:None,
-                         6:Wait,7:Headway,8:TripBoard,9:Crossing,10:Alight,
-                         11:HeadwayBoard,12:Egress,13:HeadwayAlight,14:ElapseTime}
+                         6:Wait,7:Headway,8:TripBoard,9:Crossing,10:TripAlight,
+                         11:HeadwayBoard,12:Egress,13:HeadwayAlight,14:ElapseTime,15:Combination}
 EdgePayload._cget_type = lgs.epGetType
 EdgePayload._cwalk = lgs.epWalk
 EdgePayload._cwalk_back = lgs.epWalkBack
@@ -1482,6 +1736,10 @@ ElapseTime._cdel = lgs.elapseTimeDestroy
 ElapseTime._cwalk = lgs.elapseTimeWalk
 ElapseTime._cwalk_back = lgs.elapseTimeWalkBack
 
+Combination._cnew = lgs.comboNew
+Combination._cdel = lgs.comboDestroy
+Combination._cwalk = lgs.comboWalk
+Combination._cwalk_back = lgs.comboWalkBack
 
 TripBoard._cnew = lgs.tbNew
 TripBoard._cdel = lgs.tbDestroy
@@ -1491,8 +1749,8 @@ TripBoard._cwalk = lgs.epWalk
 Crossing._cnew = lgs.crNew
 Crossing._cdel = lgs.crDestroy
 
-Alight._cnew = lgs.alNew
-Alight._cdel = lgs.alDestroy
+TripAlight._cnew = lgs.alNew
+TripAlight._cdel = lgs.alDestroy
 
 HeadwayBoard._cnew = lgs.hbNew
 HeadwayBoard._cdel = lgs.hbDestroy

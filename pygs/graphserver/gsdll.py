@@ -1,4 +1,3 @@
-
 import atexit
 from ctypes import cdll, CDLL, pydll, PyDLL, CFUNCTYPE
 from ctypes import string_at, byref, c_int, c_long, c_float, c_size_t, c_char_p, c_double, c_void_p, py_object

@@ -5,6 +5,7 @@
 Crossing*
 crNew( ) {
   Crossing* ret = (Crossing*)malloc(sizeof(Crossing));
+  ret->external_id = 0;
   ret->type = PL_CROSSING;
   ret->n = 0;
   ret->crossing_times = NULL;
@@ -20,7 +21,7 @@ void
 crDestroy(Crossing* this) {
     int i;
     for(i=0; i<this->n; i++) {
-        free(this->crossing_time_trip_ids[0]);
+        free(this->crossing_time_trip_ids[i]);
     }
     free(this->crossing_time_trip_ids);
     free(this->crossing_times);

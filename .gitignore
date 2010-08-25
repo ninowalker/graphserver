@@ -13,7 +13,7 @@ apps/transitshed/*.surface
 core/.cproject
 core/.project
 core/Debug
-core/test
+core/test/build
 jags/.classpath
 jags/.project
 jags/.settings

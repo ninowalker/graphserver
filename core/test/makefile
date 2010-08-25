@@ -1,11 +1,15 @@
 
-SRCS = testsetparent.c streetprofile.c testdestroystates.c thsprofile.c test_batch_create.c deadend.c
+SRCS = testsetparent.c deadend.c hops.c streetprofile.c testdestroystates.c test_crossing.c init_prio_queue.c contract.c testheap.c test_ch.c
 TESTS = $(SRCS:.c=)
+BUILDDIR = build
 
-all: $(TESTS)
+all: buildbuild $(TESTS)
 
 clean:
-	rm $(TESTS)	
+	rm $(TESTS)
 
-%: %.c ../core/libgraphserver.so
-	cc -g $< ../core/libgraphserver.so -o $@ -lm -liberty
+buildbuild:
+	mkdir -p $(BUILDDIR)
+
+%: %.c ../libgraphserver.so
+	cc -g $< ../libgraphserver.so -o $(BUILDDIR)/$@ -lm 

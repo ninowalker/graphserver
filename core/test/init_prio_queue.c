@@ -1,22 +1,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../core/graph.h"
+#include "../graphserver.h"
+#include "../graph.h"
+#include "../heap.h"
 #include <valgrind/callgrind.h>
-#include "../core/contraction.h"
+#include "../contraction.h"
+#include "../fibheap/fibheap.h"
 
-//This shouldn't leak memory
 int main() {
     
-    Graph* gg = gNew();
+    int MAX_IMPORT = 100;
     
+    Graph* gg = gNew();
+
     //Load up edges
-    FILE* fp = fopen("wallingford.csv", "r");
+    FILE* fp = fopen("map.csv", "r");
     char via[20];
     char from[20];
     char to[20];
     double length;
-    while( !feof( fp ) ){
+    int i=0;
+    while( !feof( fp ) && i < MAX_IMPORT ){
+        i++;
+        
         fscanf(fp, "%[^,],%[^,],%[^,],%lf\n", &via, &from, &to, &length);
         
         gAddVertex( gg, from );
@@ -30,22 +37,15 @@ int main() {
     fclose( fp );
     
     WalkOptions* wo = woNew();
+    Heap* pq = init_priority_queue( gg, wo, 1 );
     
-    int n;
-    
-    long graphsize;
-    Vertex** vertices = gVertices( gg, &graphsize);
-    int i,j;
-    for(i=0; i<graphsize; i++) {
-        Path** shortcuts = get_shortcuts( gg, vertices[i], wo, 1, &n );
-        printf( "found %d shortcuts for %s (%d/%ld)\n\r", n, vertices[i]->label, i+1, graphsize );
-        for(j=0; j<n; j++) {
-            pathDestroy( shortcuts[j] );
-        }
-        free( shortcuts );
+    while( !heapEmpty(pq) ) {
+        long prio;
+        Vertex* next = pqPop( pq, &prio );
+        printf( "next vertex: %p has prio: %d\n", next, prio );
     }
     
-    free(vertices);
+    heapDestroy( pq );
     woDestroy( wo );
     gDestroy(gg);
     
