@@ -26,6 +26,8 @@ for _dlldir in _dlldirs:
 if not lgs:
     raise ImportError("unable to find libgraphserver shared library in the usual locations: %s" % "\n".join(_dlldirs))
 
+libc = cdll.LoadLibrary(find_library('c'))
+
 class _EmptyClass(object):
     pass
 
@@ -61,7 +63,6 @@ def _declare(fun, restype, argtypes):
     fun.restype = restype
     fun.safe = True
 
-
 class LGSTypes:
     ServiceId = c_int
     EdgePayload = c_void_p
@@ -73,6 +74,8 @@ class LGSTypes:
     Graph = c_void_p
     Path = c_void_p
     Vector = c_void_p
+    SPTVertex = c_void_p
+    ShortestPathTree = c_void_p
     ServicePeriod = c_void_p
     ServiceCalendar = c_void_p
     Timezone = c_void_p
@@ -90,6 +93,12 @@ class LGSTypes:
     Alight = c_void_p
     PayloadMethods = c_void_p
     CustomPayload = c_void_p
+    TripAlight = c_void_p
+    Combination = c_void_p
+    CHPath = c_void_p
+    CH = c_void_p
+    Heap = c_void_p
+    HeapNode = c_void_p
     edgepayload_t = c_int
     class ENUM_edgepayload_t:
         PL_STREET = 0
@@ -107,32 +116,55 @@ class LGSTypes:
         PL_EGRESS = 12
         PL_HEADWAYALIGHT = 13
         PL_ELAPSE_TIME = 14
-    
-LGSTypes.edgepayload_t = {1:c_int8, 2:c_int16, 4:c_int32, 8:c_int64}[c_size_t.in_dll(lgs, "EDGEPAYLOAD_ENUM_SIZE").value]
+        PL_COMBINATION = 15
 
+LGSTypes.edgepayload_t = {1:c_int8, 2:c_int16, 4:c_int32, 8:c_int64}[c_size_t.in_dll(lgs, "EDGEPAYLOAD_ENUM_SIZE").value]
 declarations = [\
+    (lgs.chpNew, LGSTypes.CHPath, [c_int, c_long]),
+    (lgs.chpLength, c_int, [LGSTypes.CHPath]),
+    (lgs.chpCombine, LGSTypes.CHPath, [LGSTypes.CHPath, LGSTypes.CHPath]),
+    (lgs.chpDestroy, None, [LGSTypes.CHPath]),
+    (lgs.dist, LGSTypes.CHPath, [LGSTypes.Graph, c_char_p, c_char_p, LGSTypes.WalkOptions, c_int, c_int]),
+    (lgs.get_shortcuts, POINTER(LGSTypes.CHPath), [LGSTypes.Graph, LGSTypes.Vertex, LGSTypes.WalkOptions, c_int, POINTER(c_int)]),
+    (lgs.init_priority_queue, LGSTypes.Heap, [LGSTypes.Graph, LGSTypes.WalkOptions, c_int]),
+    (lgs.pqPush, None, [LGSTypes.Heap, LGSTypes.Vertex, c_long]),
+    (lgs.pqPop, LGSTypes.Vertex, [LGSTypes.Heap, POINTER(c_long)]),
+    (lgs.get_contraction_hierarchies, LGSTypes.CH, [LGSTypes.Graph, LGSTypes.WalkOptions, c_int]),
+    (lgs.chNew, LGSTypes.CH, []),
+    (lgs.chUpGraph, LGSTypes.Graph, [LGSTypes.CH]),
+    (lgs.chDownGraph, LGSTypes.Graph, [LGSTypes.CH]),
     (lgs.epNew, LGSTypes.EdgePayload, [LGSTypes.edgepayload_t, c_void_p]),
     (lgs.epDestroy, None, [LGSTypes.EdgePayload]),
     (lgs.epGetType, LGSTypes.edgepayload_t, [LGSTypes.EdgePayload]),
+    (lgs.epGetExternalId, c_long, [LGSTypes.EdgePayload]),
+    (lgs.epSetExternalId, None, [LGSTypes.EdgePayload, c_long]),
     (lgs.epWalk, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
     (lgs.epWalkBack, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
     (lgs.gNew, LGSTypes.Graph, []),
-    (lgs.gDestroy, None, [LGSTypes.Graph, c_int, c_int]),
+    (lgs.gDestroyBasic, None, [LGSTypes.Graph, c_int]),
+    (lgs.gDestroy, None, [LGSTypes.Graph]),
     (lgs.gAddVertex, LGSTypes.Vertex, [LGSTypes.Graph, c_char_p]),
-    (lgs.gRemoveVertex, None, [LGSTypes.Graph, c_char_p, c_int, c_int]),
+    (lgs.gRemoveVertex, None, [LGSTypes.Graph, c_char_p, c_int]),
     (lgs.gGetVertex, LGSTypes.Vertex, [LGSTypes.Graph, c_char_p]),
-    (lgs.gAddVertices, None, [LGSTypes.Graph, POINTER(c_char_p), c_int]),
+    (lgs.gAddVertices, None, [LGSTypes.Graph, c_char_p, c_int]),
     (lgs.gAddEdge, LGSTypes.Edge, [LGSTypes.Graph, c_char_p, c_char_p, LGSTypes.EdgePayload]),
     (lgs.gVertices, POINTER(LGSTypes.Vertex), [LGSTypes.Graph, POINTER(c_long)]),
-    (lgs.gShortestPathTree, LGSTypes.Graph, [LGSTypes.Graph, c_char_p, c_char_p, LGSTypes.State, LGSTypes.WalkOptions, c_long]),
-    (lgs.gShortestPathTreeRetro, LGSTypes.Graph, [LGSTypes.Graph, c_char_p, c_char_p, LGSTypes.State, LGSTypes.WalkOptions, c_long]),
-    (lgs.gShortestPath, LGSTypes.State, [LGSTypes.Graph, c_char_p, c_char_p, LGSTypes.State, c_int, POINTER(c_long), LGSTypes.WalkOptions, c_long]),
+    (lgs.gShortestPathTree, LGSTypes.ShortestPathTree, [LGSTypes.Graph, c_char_p, c_char_p, LGSTypes.State, LGSTypes.WalkOptions, c_long, c_int, c_long]),
+    (lgs.gShortestPathTreeRetro, LGSTypes.ShortestPathTree, [LGSTypes.Graph, c_char_p, c_char_p, LGSTypes.State, LGSTypes.WalkOptions, c_long, c_int, c_long]),
+    (lgs.gShortestPath, LGSTypes.State, [LGSTypes.Graph, c_char_p, c_char_p, LGSTypes.State, c_int, POINTER(c_long), LGSTypes.WalkOptions, c_long, c_int, c_long]),
     (lgs.gSize, c_long, [LGSTypes.Graph]),
-    (lgs.gSetThicknesses, None, [LGSTypes.Graph, c_char_p]),
     (lgs.gSetVertexEnabled, None, [LGSTypes.Graph, c_char_p, c_int]),
+    (lgs.sptNew, LGSTypes.ShortestPathTree, []),
+    (lgs.sptDestroy, None, [LGSTypes.ShortestPathTree]),
+    (lgs.sptAddVertex, LGSTypes.SPTVertex, [LGSTypes.ShortestPathTree, LGSTypes.Vertex, c_int]),
+    (lgs.sptRemoveVertex, None, [LGSTypes.ShortestPathTree, c_char_p]),
+    (lgs.sptGetVertex, LGSTypes.SPTVertex, [LGSTypes.ShortestPathTree, c_char_p]),
+    (lgs.sptAddEdge, LGSTypes.Edge, [LGSTypes.ShortestPathTree, c_char_p, c_char_p, LGSTypes.EdgePayload]),
+    (lgs.sptVertices, POINTER(LGSTypes.SPTVertex), [LGSTypes.ShortestPathTree, POINTER(c_long)]),
+    (lgs.sptSize, c_long, [LGSTypes.ShortestPathTree]),
     (lgs.sptPathRetro, LGSTypes.Path, [LGSTypes.Graph, c_char_p]),
     (lgs.vNew, LGSTypes.Vertex, [c_char_p]),
-    (lgs.vDestroy, None, [LGSTypes.Vertex, c_int, c_int]),
+    (lgs.vDestroy, None, [LGSTypes.Vertex, c_int]),
     (lgs.vLink, LGSTypes.Edge, [LGSTypes.Vertex, LGSTypes.Vertex, LGSTypes.EdgePayload]),
     (lgs.vSetParent, LGSTypes.Edge, [LGSTypes.Vertex, LGSTypes.Vertex, LGSTypes.EdgePayload]),
     (lgs.vGetOutgoingEdgeList, LGSTypes.ListNode, [LGSTypes.Vertex]),
@@ -142,7 +174,21 @@ declarations = [\
     (lgs.vGetLabel, c_char_p, [LGSTypes.Vertex]),
     (lgs.vDegreeOut, c_int, [LGSTypes.Vertex]),
     (lgs.vDegreeIn, c_int, [LGSTypes.Vertex]),
-    (lgs.vPayload, LGSTypes.State, [LGSTypes.Vertex]),
+    (lgs.sptvNew, LGSTypes.SPTVertex, [LGSTypes.Vertex, c_int]),
+    (lgs.sptvDestroy, None, [LGSTypes.SPTVertex]),
+    (lgs.sptvLink, LGSTypes.Edge, [LGSTypes.SPTVertex, LGSTypes.SPTVertex, LGSTypes.EdgePayload]),
+    (lgs.sptvSetParent, LGSTypes.Edge, [LGSTypes.SPTVertex, LGSTypes.SPTVertex, LGSTypes.EdgePayload]),
+    (lgs.sptvGetOutgoingEdgeList, LGSTypes.ListNode, [LGSTypes.SPTVertex]),
+    (lgs.sptvGetIncomingEdgeList, LGSTypes.ListNode, [LGSTypes.SPTVertex]),
+    (lgs.sptvRemoveOutEdgeRef, None, [LGSTypes.SPTVertex, LGSTypes.Edge]),
+    (lgs.sptvRemoveInEdgeRef, None, [LGSTypes.SPTVertex, LGSTypes.Edge]),
+    (lgs.sptvGetLabel, c_char_p, [LGSTypes.SPTVertex]),
+    (lgs.sptvDegreeOut, c_int, [LGSTypes.SPTVertex]),
+    (lgs.sptvDegreeIn, c_int, [LGSTypes.SPTVertex]),
+    (lgs.sptvState, LGSTypes.State, [LGSTypes.SPTVertex]),
+    (lgs.sptvHop, c_int, [LGSTypes.SPTVertex]),
+    (lgs.sptvGetParent, LGSTypes.Edge, [LGSTypes.SPTVertex]),
+    (lgs.sptvMirror, LGSTypes.Vertex, [LGSTypes.SPTVertex]),
     (lgs.eNew, LGSTypes.Edge, [LGSTypes.Vertex, LGSTypes.Vertex, LGSTypes.EdgePayload]),
     (lgs.eDestroy, None, [LGSTypes.Edge, c_int]),
     (lgs.eWalk, LGSTypes.State, [LGSTypes.Edge, LGSTypes.State, LGSTypes.WalkOptions]),
@@ -152,8 +198,12 @@ declarations = [\
     (lgs.eGetPayload, LGSTypes.EdgePayload, [LGSTypes.Edge]),
     (lgs.eGetEnabled, c_int, [LGSTypes.Edge]),
     (lgs.eSetEnabled, None, [LGSTypes.Edge, c_int]),
-    (lgs.eGetThickness, c_long, [LGSTypes.Edge]),
-    (lgs.eSetThickness, None, [LGSTypes.Edge, c_long]),
+    (lgs.heapNew, LGSTypes.Heap, [c_int]),
+    (lgs.heapDestroy, None, [LGSTypes.Heap]),
+    (lgs.heapInsert, None, [LGSTypes.Heap, c_void_p, c_long]),
+    (lgs.heapEmpty, c_int, [LGSTypes.Heap]),
+    (lgs.heapMin, c_void_p, [LGSTypes.Heap, POINTER(c_long)]),
+    (lgs.heapPop, c_void_p, [LGSTypes.Heap, POINTER(c_long)]),
     (lgs.liNew, LGSTypes.ListNode, [LGSTypes.Edge]),
     (lgs.liInsertAfter, None, [LGSTypes.ListNode, LGSTypes.ListNode]),
     (lgs.liRemoveAfter, None, [LGSTypes.ListNode]),
@@ -252,23 +302,13 @@ declarations = [\
     (lgs.woSetWalkingOverage, None, [LGSTypes.WalkOptions, c_float]),
     (lgs.woGetTurnPenalty, c_int, [LGSTypes.WalkOptions]),
     (lgs.woSetTurnPenalty, None, [LGSTypes.WalkOptions, c_int]),
-    (lgs.alNew, LGSTypes.Alight, [LGSTypes.ServiceId, LGSTypes.ServiceCalendar, LGSTypes.Timezone, c_int]),
-    (lgs.alDestroy, None, [LGSTypes.Alight]),
-    (lgs.alGetCalendar, LGSTypes.ServiceCalendar, [LGSTypes.Alight]),
-    (lgs.alGetTimezone, LGSTypes.Timezone, [LGSTypes.Alight]),
-    (lgs.alGetAgency, c_int, [LGSTypes.Alight]),
-    (lgs.alGetServiceId, LGSTypes.ServiceId, [LGSTypes.Alight]),
-    (lgs.alGetNumAlightings, c_int, [LGSTypes.Alight]),
-    (lgs.alAddAlighting, None, [LGSTypes.Alight, c_char_p, c_int, c_int]),
-    (lgs.alGetAlightingTripId, c_char_p, [LGSTypes.Alight, c_int]),
-    (lgs.alGetAlightingArrival, c_int, [LGSTypes.Alight, c_int]),
-    (lgs.alGetAlightingStopSequence, c_int, [LGSTypes.Alight, c_int]),
-    (lgs.alSearchAlightingsList, c_int, [LGSTypes.Alight, c_int]),
-    (lgs.alGetLastAlightingIndex, c_int, [LGSTypes.Alight, c_int]),
-    (lgs.alGetOverage, c_int, [LGSTypes.Alight]),
-    (lgs.alGetAlightingIndexByTripId, c_int, [LGSTypes.Alight, c_char_p]),
-    (lgs.alWalk, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
-    (lgs.alWalkBack, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
+    (lgs.comboNew, LGSTypes.Combination, [c_int]),
+    (lgs.comboAdd, None, [LGSTypes.Combination, LGSTypes.EdgePayload]),
+    (lgs.comboDestroy, None, [LGSTypes.Combination]),
+    (lgs.comboWalk, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
+    (lgs.comboWalkBack, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
+    (lgs.comboGet, LGSTypes.EdgePayload, [LGSTypes.Combination, c_int]),
+    (lgs.comboN, c_int, [LGSTypes.Combination]),
     (lgs.crNew, LGSTypes.Crossing, []),
     (lgs.crDestroy, None, [LGSTypes.Crossing]),
     (lgs.crAddCrossingTime, None, [LGSTypes.Crossing, c_char_p, c_int]),
@@ -342,8 +382,8 @@ declarations = [\
     (lgs.linkWalk, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
     (lgs.linkWalkBack, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
     (lgs.linkGetName, c_char_p, [LGSTypes.Link]),
-    (lgs.streetNew, LGSTypes.Street, [c_char_p, c_double]),
-    (lgs.streetNewElev, LGSTypes.Street, [c_char_p, c_double, c_float, c_float]),
+    (lgs.streetNew, LGSTypes.Street, [c_char_p, c_double, c_int]),
+    (lgs.streetNewElev, LGSTypes.Street, [c_char_p, c_double, c_float, c_float, c_int]),
     (lgs.streetDestroy, None, [LGSTypes.Street]),
     (lgs.streetWalk, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
     (lgs.streetWalkBack, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
@@ -355,8 +395,26 @@ declarations = [\
     (lgs.streetSetFall, None, [LGSTypes.Street, c_float]),
     (lgs.streetGetWay, c_long, [LGSTypes.Street]),
     (lgs.streetSetWay, None, [LGSTypes.Street, c_long]),
-    (lgs.streetSetSlog, None, [LGSTypes.Street, c_float]),
     (lgs.streetGetSlog, c_float, [LGSTypes.Street]),
+    (lgs.streetSetSlog, None, [LGSTypes.Street, c_float]),
+    (lgs.streetGetReverseOfSource, c_int, [LGSTypes.Street]),
+    (lgs.alNew, LGSTypes.TripAlight, [LGSTypes.ServiceId, LGSTypes.ServiceCalendar, LGSTypes.Timezone, c_int]),
+    (lgs.alDestroy, None, [LGSTypes.TripAlight]),
+    (lgs.alGetCalendar, LGSTypes.ServiceCalendar, [LGSTypes.TripAlight]),
+    (lgs.alGetTimezone, LGSTypes.Timezone, [LGSTypes.TripAlight]),
+    (lgs.alGetAgency, c_int, [LGSTypes.TripAlight]),
+    (lgs.alGetServiceId, LGSTypes.ServiceId, [LGSTypes.TripAlight]),
+    (lgs.alGetNumAlightings, c_int, [LGSTypes.TripAlight]),
+    (lgs.alAddAlighting, None, [LGSTypes.TripAlight, c_char_p, c_int, c_int]),
+    (lgs.alGetAlightingTripId, c_char_p, [LGSTypes.TripAlight, c_int]),
+    (lgs.alGetAlightingArrival, c_int, [LGSTypes.TripAlight, c_int]),
+    (lgs.alGetAlightingStopSequence, c_int, [LGSTypes.TripAlight, c_int]),
+    (lgs.alSearchAlightingsList, c_int, [LGSTypes.TripAlight, c_int]),
+    (lgs.alGetLastAlightingIndex, c_int, [LGSTypes.TripAlight, c_int]),
+    (lgs.alGetOverage, c_int, [LGSTypes.TripAlight]),
+    (lgs.alGetAlightingIndexByTripId, c_int, [LGSTypes.TripAlight, c_char_p]),
+    (lgs.alWalk, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
+    (lgs.alWalkBack, LGSTypes.State, [LGSTypes.EdgePayload, LGSTypes.State, LGSTypes.WalkOptions]),
     (lgs.tbNew, LGSTypes.TripBoard, [LGSTypes.ServiceId, LGSTypes.ServiceCalendar, LGSTypes.Timezone, c_int]),
     (lgs.tbDestroy, None, [LGSTypes.TripBoard]),
     (lgs.tbGetCalendar, LGSTypes.ServiceCalendar, [LGSTypes.TripBoard]),
