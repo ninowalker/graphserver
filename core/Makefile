@@ -67,27 +67,8 @@ endif
 	@rm -f $*.d.tmp
 -include $(OBJECTS:.o=.d)
 
-#.PHONY: gs_swig_wrap.c
-
 libgraphserver.so: $(OBJECTS)
 	cc -shared -o $@ $(OBJECTS) $(LDFLAGS)
-
-_libgraphserver_swig.so: $(OBJECTS) gs_swig_wrap.o gs_swig_wrap.c
-	cc -shared -o $@ $(OBJECTS) gs_swig_wrap.o $(LDFLAGS)
-
-gs_swig_wrap.c: gs_swig.swg $(OBJECTS:.o=.h)
-	/usr/local/bin/swig -python gs_swig.swg
-
-java: gs_swig.swg $(OBJECTS:.o=.h)
-	cp gs_swig.swg gs_swig_java.swg
-	/usr/local/bin/swig -java gs_swig_java.swg
-	gcc gs_swig_java_wrap.c -c -o gs_swig_java_wrap.o $(CFLAGS) -I/System/Library/Frameworks/JavaVM.framework/Headers 
-	cc -shared -o libgs_swig_java.dylib $(OBJECTS) gs_swig_java_wrap.o $(LDFLAGS)
-	javac *.java
-	
-
-
-allswig: _libgraphserver_swig.so
 
 install:
 	cp libgraphserver.so $(PREFIX)/lib

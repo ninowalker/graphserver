@@ -1,0 +1,24 @@
+-include Makefile
+
+# forces the file to be rebuilt
+.PHONY: gs_swig_wrap.c
+
+python_swig: _libgraphserver_swig.so
+
+_libgraphserver_swig.so: $(OBJECTS) gs_swig_wrap.o gs_swig_wrap.c
+	cc -shared -o $@ $(OBJECTS) gs_swig_wrap.o $(LDFLAGS)
+
+# python swig file
+gs_swig_wrap.c: gs_swig.swg $(OBJECTS:.o=.h)
+	/usr/local/bin/swig -python gs_swig.swg
+
+# java swig files
+java_swig: gs_swig.swg $(OBJECTS:.o=.h)
+	cp gs_swig.swg gs_swig_java.swg
+	/usr/local/bin/swig -java gs_swig_java.swg
+	gcc gs_swig_java_wrap.c -c -o gs_swig_java_wrap.o $(CFLAGS) -I/System/Library/Frameworks/JavaVM.framework/Headers 
+	cc -shared -o libgs_swig_java.dylib $(OBJECTS) gs_swig_java_wrap.o $(LDFLAGS)
+	javac *.java
+
+allswig: _libgraphserver_swig.so
+
