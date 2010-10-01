@@ -1,5 +1,6 @@
 package org.graphserver.jna.test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import junit.framework.TestCase;
@@ -15,11 +16,13 @@ public class TestJNALibraryAccess extends TestCase {
 		assertNotNull("libname", libname);
 	}
 	
-	public void testLibraryInstanceCreated() throws ClassNotFoundException, SecurityException, NoSuchFieldException {
+	public void testLibraryInstanceCreated() throws ClassNotFoundException, SecurityException, NoSuchFieldException, Exception, Exception {
 		ClassLoader cl = TestJNALibraryAccess.class.getClassLoader();
 		Class c = cl.loadClass("org.graphserver.jna.GraphserverLibrary");
 		assertNotNull(c);
-		assertNotNull(c.getField("INSTANCE"));
+		assertNotNull(c.getField("INSTANCE").get(c));
+		Field libname = c.getField("JNA_LIBRARY_NAME");
+		assertEquals("/usr/local/lib/libgraphserver.dylib", (String)libname.get(c));
 	}
 	
 	public void testLibraryMethod() throws ClassNotFoundException, SecurityException, NoSuchFieldException, Exception {
