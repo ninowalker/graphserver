@@ -1,8 +1,7 @@
-all: libgraphserver.so
 
 # to override base installation directory run
 # PREFIX=... make install
-PREFIX=/usr
+PREFIX=/usr/local
 
 OBJECTS= fibheap/dirfibheap.o \
 	fibheap/fibheap.o \
@@ -48,9 +47,13 @@ ifeq ($(OS),Darwin)
 #  LDFLAGS += -dynamiclib -arch i386
 #  CFLAGS += -arch i386
   LDFLAGS += -dynamiclib
+  DLLSUFFIX = dylib
 else
   LDFLAGS += -shared
+  DLLSUFFIX = so
 endif
+
+all: libgraphserver.$(DLLSUFFIX)
 
 # This complicated-looking rule will autogenerate the appropriate dependancies
 # for each source file, ensuring that they are recompiled when the headers
@@ -67,11 +70,11 @@ endif
 	@rm -f $*.d.tmp
 -include $(OBJECTS:.o=.d)
 
-libgraphserver.so: $(OBJECTS)
+libgraphserver.$(DLLSUFFIX): $(OBJECTS)
 	cc -shared -o $@ $(OBJECTS) $(LDFLAGS)
 
 install:
-	cp libgraphserver.so $(PREFIX)/lib
+	cp libgraphserver.$(DLLSUFFIX) $(PREFIX)/lib
 	mkdir -p $(PREFIX)/include/graphserver
 	cp fibheap/fibheap.h $(PREFIX)/include/graphserver
 	cp fibheap/dirfibheap.h $(PREFIX)/include/graphserver
@@ -83,5 +86,5 @@ install:
 	cp hashtable/hashtable_private.h $(PREFIX)/include/graphserver
 
 clean:
-	rm -f *.{so,o,d} */*.{so,o,d} *~
+	rm -f *.{$(DLLSUFFIX),o,d} */*.{$(DLLSUFFIX),o,d} *~
 
