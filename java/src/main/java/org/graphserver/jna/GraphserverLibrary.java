@@ -26,13 +26,11 @@ public interface GraphserverLibrary extends Library {
 					org.graphserver.jna.GraphserverLibrary.class);
 	public static final NativeLibrary JNA_NATIVE_LIB = NativeLibrary
 			.getInstance(
-					org.graphserver.jna.GraphserverLibrary.JNA_LIBRARY_NAME,
-					com.ochafik.lang.jnaerator.runtime.MangledFunctionMapper.DEFAULT_OPTIONS);
+					org.graphserver.jna.GraphserverLibrary.JNA_LIBRARY_NAME);
 	public static final GraphserverLibrary INSTANCE = (GraphserverLibrary) Native
 			.loadLibrary(
 					org.graphserver.jna.GraphserverLibrary.JNA_LIBRARY_NAME,
-					org.graphserver.jna.GraphserverLibrary.class,
-					com.ochafik.lang.jnaerator.runtime.MangledFunctionMapper.DEFAULT_OPTIONS);
+					org.graphserver.jna.GraphserverLibrary.class);
 
 	/**
 	 * <i>native declaration : /Users/kolohe/dev/graphserver/core/graphserver.h</i><br>
