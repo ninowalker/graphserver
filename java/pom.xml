@@ -11,15 +11,20 @@
 	<url>http://maven.apache.org</url>
 
 	<properties>
+	    <java.version>1.5</java.version>
+	    <graphserver.lib>/usr/local/lib/libgraphserver.dylib</graphserver.lib>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<maven.junit.jvmargs>-Dlibrary.graphserver=${graphserver.lib}</maven.junit.jvmargs>
 	</properties>
 
 	<dependencies>
-<dependency>
-    <groupId>com.sun.jna</groupId>
-    <artifactId>jna</artifactId>
-    <version>3.0.9</version>
-</dependency>
+		<dependency>
+			<groupId>com.sun.jna</groupId>
+			<artifactId>jna</artifactId>
+			<version>3.2.7</version>
+			<scope>system</scope>
+			<systemPath>${basedir}/lib/jna.jar</systemPath>
+		</dependency>
 
 		<dependency>
 			<groupId>com.jnaerator</groupId>
@@ -34,13 +39,26 @@
 			<version>3.8.1</version>
 			<scope>test</scope>
 		</dependency>
-	</dependencies>
 
+		<!--
+			Jython version 2.5.1 and it's standard library are included in the
+			project lib directory
+		-->
+		<dependency>
+			<groupId>org.python</groupId>
+			<artifactId>jython-complete</artifactId>
+			<version>2.5.1</version>
+		</dependency>
+	</dependencies>
 	<repositories>
 		<repository>
 			<id>nativelibs4java-repo</id>
 			<name>NativeLibs4Java Maven Repository</name>
 			<url>http://nativelibs4java.sourceforge.net/maven</url>
+		</repository>
+		<repository>
+			<id>Sakai Repo</id>
+			<url>http://source.sakaiproject.org/maven2</url>
 		</repository>
 	</repositories>
 	<pluginRepositories>
@@ -55,11 +73,19 @@
 			<plugin>
 				<artifactId>maven-compiler-plugin</artifactId>
 				<configuration>
-					<source>1.5</source>
-					<target>1.5</target>
+					<source>${java.version}</source>
+					<target>${java.version}</target>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<forkMode>pertest</forkMode>
+					<argLine>${maven.junit.jvmargs}</argLine>
 				</configuration>
 			</plugin>
 		</plugins>
-	</build>
 
+	</build>
 </project>
