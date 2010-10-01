@@ -52,7 +52,7 @@ gDestroy( Graph* this ) {
 }
 
 Vertex*
-gAddVertex( Graph* this, char *label ) {
+gAddVertex( Graph* this, const char *label ) {
   Vertex* exists = gGetVertex( this, label );
   if( !exists ) {
     exists = vNew( label );
@@ -63,7 +63,7 @@ gAddVertex( Graph* this, char *label ) {
 }
 
 void
-gRemoveVertex( Graph* this, char *label, int free_edge_payloads ) {
+gRemoveVertex( Graph* this, const char *label, int free_edge_payloads ) {
     Vertex *exists = gGetVertex( this, label );
     if(!exists) {
         return;
@@ -74,7 +74,7 @@ gRemoveVertex( Graph* this, char *label, int free_edge_payloads ) {
 }
 
 void 
-gAddVertices( Graph* this, char **labels, int n ) {
+gAddVertices( Graph* this, const char **labels, int n ) {
   int i;
   for (i = 0; i < n; i++) {
   	gAddVertex(this, labels[i]);
@@ -82,12 +82,12 @@ gAddVertices( Graph* this, char **labels, int n ) {
 }
 
 Vertex*
-gGetVertex( Graph* this, char *label ) {
+gGetVertex( Graph* this, const char *label ) {
   return hashtable_search( this->vertices, label );
 }
 
 Edge*
-gAddEdge( Graph* this, char *from, char *to, EdgePayload *payload ) {
+gAddEdge( Graph* this, const char *from, const char *to, EdgePayload *payload ) {
   Vertex* vtx_from = gGetVertex( this, from );
   Vertex* vtx_to   = gGetVertex( this, to );
 
@@ -128,7 +128,7 @@ gVertices( Graph* this, long* num_vertices ) {
 #define LARGEST_ROUTE_SIZE 10000
 
 State*
-gShortestPath( Graph* this, char *from, char *to, State* init_state, int direction, long *size, WalkOptions* options, long timelimit, int hoplimit, long weightlimit ) {
+gShortestPath( Graph* this, const char *from, const char *to, State* init_state, int direction, long *size, WalkOptions* options, long timelimit, int hoplimit, long weightlimit ) {
   //make sure from/to vertices exist
   if( !gGetVertex( this, from ) ) {
     fprintf( stderr, "Origin vertex \"%s\" does not exist\n", from );
@@ -209,7 +209,7 @@ gShortestPath( Graph* this, char *from, char *to, State* init_state, int directi
 }
 
 Path *
-sptPathRetro(Graph* g, char* origin_label) {
+sptPathRetro(Graph* g, const char* origin_label) {
 	Vertex* curr = gGetVertex(g, origin_label);
 	ListNode* incoming = NULL;
 	Edge* edge = NULL;
@@ -234,7 +234,7 @@ gSize( Graph* this ) {
 }
 
 void
-gSetVertexEnabled( Graph *this, char *label, int enabled ) {
+gSetVertexEnabled( Graph *this, const char *label, int enabled ) {
     
     Vertex *vv = gGetVertex( this, label );
     
@@ -292,7 +292,7 @@ sptAddVertex( ShortestPathTree *this, Vertex *mirror, int hop ) {
 }
 
 void
-sptRemoveVertex( ShortestPathTree *this, char *label ) {
+sptRemoveVertex( ShortestPathTree *this, const char *label ) {
     SPTVertex *exists = sptGetVertex( this, label );
     if(!exists) {
         return;
@@ -303,12 +303,12 @@ sptRemoveVertex( ShortestPathTree *this, char *label ) {
 }
 
 SPTVertex*
-sptGetVertex( ShortestPathTree *this, char *label ) {
+sptGetVertex( ShortestPathTree *this, const char *label ) {
     return (SPTVertex*)gGetVertex( (Graph*)this, label );
 }
 
 Edge*
-sptAddEdge( ShortestPathTree *this, char *from, char *to, EdgePayload *payload ) {
+sptAddEdge( ShortestPathTree *this, const char *from, const char *to, EdgePayload *payload ) {
   SPTVertex* vtx_from = sptGetVertex( this, from );
   SPTVertex* vtx_to   = sptGetVertex( this, to );
 
@@ -331,7 +331,7 @@ sptSize( ShortestPathTree* this ) {
 
 // VERTEX FUNCTIONS
 
-void vInit( Vertex *this, char *label ) {
+void vInit( Vertex *this, const char *label ) {
     this->degree_in = 0;
     this->degree_out = 0;
     this->outgoing = liNew( NULL ) ;
@@ -345,7 +345,7 @@ void vInit( Vertex *this, char *label ) {
 }
 
 Vertex *
-vNew( char* label ) {
+vNew( const char* label ) {
     Vertex *this = (Vertex *)malloc(sizeof(Vertex)) ;
 
     vInit( this, label );
@@ -428,7 +428,7 @@ vRemoveInEdgeRef( Vertex* this, Edge* todie ) {
     liRemoveRef( this->incoming, todie );
 }
 
-char*
+const char*
 vGetLabel( Vertex* this ) {
     return this->label;
 }
@@ -495,7 +495,7 @@ sptvRemoveInEdgeRef( SPTVertex* this, Edge* todie ) {
     vRemoveInEdgeRef( (Vertex*)this, todie );
 }
     
-char*
+const char*
 sptvGetLabel( SPTVertex* this ) {
     return vGetLabel( (Vertex*)this );
 }

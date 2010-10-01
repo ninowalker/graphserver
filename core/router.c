@@ -1,8 +1,8 @@
 ShortestPathTree*
 #ifndef RETRO
-gShortestPathTree( Graph* this, char *from, char *to, State* init_state, WalkOptions* options, long maxtime, int hoplimit, long weightlimit ) {
+gShortestPathTree( Graph* this, const char *from, const char *to, State* init_state, WalkOptions* options, long maxtime, int hoplimit, long weightlimit ) {
 #else
-gShortestPathTreeRetro( Graph* this, char *from, char *to, State* init_state, WalkOptions* options, long mintime, int hoplimit, long weightlimit ) {
+gShortestPathTreeRetro( Graph* this, const char *from, const char *to, State* init_state, WalkOptions* options, long mintime, int hoplimit, long weightlimit ) {
 #endif
     
 /*
@@ -16,11 +16,11 @@ gShortestPathTreeRetro( Graph* this, char *from, char *to, State* init_state, Wa
 
   //Goal Variables
 #ifndef RETRO
-  char* origin = from;
-  char* target = to;
+  const char* origin = from;
+  const char* target = to;
 #else
-  char* origin = to;
-  char* target = from;
+  const char* origin = to;
+  const char* target = from;
 #endif
 
   //Get origin vertex to make sure it exists

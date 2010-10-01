@@ -60,38 +60,38 @@ void
 gDestroy( Graph* this );
 
 Vertex*
-gAddVertex( Graph* this, char *label );
+gAddVertex( Graph* this, const char *label );
 
 void
-gRemoveVertex( Graph* this, char *label, int free_edge_payloads );
+gRemoveVertex( Graph* this, const char *label, int free_edge_payloads );
 
 Vertex*
-gGetVertex( Graph* this, char *label );
+gGetVertex( Graph* this, const char *label );
 
 void
-gAddVertices( Graph* this, char **labels, int n );
+gAddVertices( Graph* this, const char **labels, int n );
 
 Edge*
-gAddEdge( Graph* this, char *from, char *to, EdgePayload *payload );
+gAddEdge( Graph* this, const char *from, const char *to, EdgePayload *payload );
 
 Vertex**
 gVertices( Graph* this, long* num_vertices );
 
 ShortestPathTree*
-gShortestPathTree( Graph* this, char *from, char *to, State* init_state, WalkOptions* options, long maxtime, int hoplimit, long weightlimit );
+gShortestPathTree( Graph* this, const char *from, const char *to, State* init_state, WalkOptions* options, long maxtime, int hoplimit, long weightlimit );
 
 ShortestPathTree*
-gShortestPathTreeRetro( Graph* this, char *from, char *to, State* init_state, WalkOptions* options, long mintime, int hoplimit, long weightlimit );
+gShortestPathTreeRetro( Graph* this, const char *from, const char *to, State* init_state, WalkOptions* options, long mintime, int hoplimit, long weightlimit );
 
 //direction specifies forward or retro routing
 State*
-gShortestPath( Graph* this, char *from, char *to, State* init_state, int direction, long *size, WalkOptions* options, long timelimit, int hoplimit, long weightlimit );
+gShortestPath( Graph* this, const char *from, const char *to, State* init_state, int direction, long *size, WalkOptions* options, long timelimit, int hoplimit, long weightlimit );
 
 long
 gSize( Graph* this );
 
 void
-gSetVertexEnabled( Graph *this, char *label, int enabled );
+gSetVertexEnabled( Graph *this, const char *label, int enabled );
 
 //SPT METHODS
 
@@ -105,13 +105,13 @@ SPTVertex*
 sptAddVertex( ShortestPathTree *this, Vertex *mirror, int hop );
 
 void
-sptRemoveVertex( ShortestPathTree *this, char *label );
+sptRemoveVertex( ShortestPathTree *this, const char *label );
 
 SPTVertex*
-sptGetVertex( ShortestPathTree *this, char *label );
+sptGetVertex( ShortestPathTree *this, const char *label );
 
 Edge*
-sptAddEdge( ShortestPathTree *this, char *from, char *to, EdgePayload *payload );
+sptAddEdge( ShortestPathTree *this, const char *from, const char *to, EdgePayload *payload );
 
 SPTVertex**
 sptVertices( ShortestPathTree *this, long* num_vertices );
@@ -120,12 +120,12 @@ long
 sptSize( ShortestPathTree* this );
 
 Path *
-sptPathRetro(Graph* g, char* origin_label);
+sptPathRetro(Graph* g, const char *origin_label);
 
 //VERTEX FUNCTIONS
 
 Vertex *
-vNew( char* label ) ;
+vNew( const char* label ) ;
 
 void
 vDestroy(Vertex* this, int free_edge_payloads) ;
@@ -152,7 +152,7 @@ vRemoveOutEdgeRef( Vertex* this, Edge* todie );
 void
 vRemoveInEdgeRef( Vertex* this, Edge* todie );
 
-char*
+const char*
 vGetLabel( Vertex* this );
 
 int
@@ -187,7 +187,7 @@ sptvRemoveOutEdgeRef( SPTVertex* this, Edge* todie );
 void
 sptvRemoveInEdgeRef( SPTVertex* this, Edge* todie );
 
-char*
+const char*
 sptvGetLabel( SPTVertex* this );
 
 int

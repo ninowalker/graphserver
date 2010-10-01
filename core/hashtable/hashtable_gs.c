@@ -6,7 +6,7 @@
 #include "hashtable_utility.h"
 
 static unsigned int
-quickhash(void *str)
+quickhash(const void *str)
 {
   unsigned long hash = 5381;
   int c;
@@ -17,7 +17,7 @@ quickhash(void *str)
   return hash;
 }
 
-static int str_eql(void* str1, void* str2) {
+static int str_eql(const void* str1, const void* str2) {
   if( strcmp(str1, str2) == 0 )
     return 1;
   else
@@ -30,7 +30,7 @@ create_hashtable_string(unsigned int minsize) {
   return ret;
 }
 
-int hashtable_insert_string(struct hashtable *h, const char *key, void *v) {
+int hashtable_insert_string(struct hashtable *h, char *key, void *v) {
   size_t length = strlen(key)+1;
 
   char* permakey = (char*)malloc(length*sizeof(char));
@@ -39,7 +39,7 @@ int hashtable_insert_string(struct hashtable *h, const char *key, void *v) {
   return hashtable_insert(h, permakey, v);
 }
 
-int hashtable_insert_str_long(struct hashtable *h, const char *key, long v) {
+int hashtable_insert_str_long(struct hashtable *h, char *key, long v) {
   long* permaval = (long*)malloc(sizeof(long));
   *permaval = v;
 
