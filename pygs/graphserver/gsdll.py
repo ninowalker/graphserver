@@ -17,7 +17,7 @@ _dlldirs = [os.path.dirname(os.path.abspath(__file__)),
             '/usr/lib',
             '/usr/local/lib']
 
-_dylibsuffix = ".so" if sys.platform != "darwin" else ".dylib"
+_dylibsuffix = "so" if sys.platform != "darwin" else "dylib"
 
 for _dlldir in _dlldirs:
     _dllpath = os.path.join(_dlldir, 'libgraphserver.%s' % _dylibsuffix)
