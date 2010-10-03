@@ -26,7 +26,7 @@ public class Graph extends CShadow<org.graphserver.jna.Graph> {
 	}
 	
 	public void free() {
-		_dll.gDestroy(this_, 1);
+		_dll.gDestroy(this_);
 	}
 	public Vertex getVertex(String v) {
 		return new Vertex(_dll.gGetVertex(this_, v));
