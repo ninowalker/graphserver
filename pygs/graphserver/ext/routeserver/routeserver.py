@@ -1,7 +1,7 @@
 from servable import Servable
 from graphserver.graphdb import GraphDatabase
 import cgi
-from graphserver.core import State, WalkOptions
+from graphserver.core import State, WalkOptions, Graph
 import time
 import sys
 import graphserver
@@ -62,8 +62,12 @@ def postprocess_path(vertices, edges, vertex_events, edge_events):
 
 class RouteServer(Servable):
     def __init__(self, graphdb_filename, vertex_events, edge_events, vertex_reverse_geocoders):
-        graphdb = GraphDatabase( graphdb_filename )
-        self.graph = graphdb.incarnate()
+        if os.path.exists("%s.gbin" % graphdb_filename):
+            self.graph = Graph()
+            self.graph.deserialize(graphdb_filename, os.path.exists("%s.gmm" % graphdb_filename))
+        else:
+            graphdb = GraphDatabase( graphdb_filename )
+            self.graph = graphdb.incarnate()
         self.vertex_events = vertex_events
         self.edge_events = edge_events
         self.vertex_reverse_geocoders = vertex_reverse_geocoders
