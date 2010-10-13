@@ -24,8 +24,8 @@ class TestGraphSerialize(unittest.TestCase):
         except: pass
 
     def inout(self):
-        self.g1.serialize(self.out1.name, self.out2.name)
-        self.g2.deserialize(self.out1.name, self.out2.name)
+        lgs.gSerialize(self.g1.soul, self.out1.name, self.out2.name)
+        lgs.gDeserialize(self.g2.soul, self.out1.name, self.out2.name)
     
     def test_vertices(self):
         nv = 10

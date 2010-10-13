@@ -118,14 +118,21 @@ class Graph(CShadow):
         
         self._cdel(self.soul, free_vertex_payloads, free_edge_payloads)
         self.soul = None
-         
-    def serialize(self, gbin_filename, mm_filename):
-        self.check_destroyed()
-        lgs.gSerialize(self.soul, c_char_p(gbin_filename), c_char_p(mm_filename)) 
 
-    def deserialize(self, gbin_filename, mm_filename):
+    def serialize(self, basename, mmap=False):
+        gbin_filename = "%s.gbin" % basename
+        mm_filename = "%s.gmm" % basename if mmap else None
         self.check_destroyed()
-        lgs.gDeserialize(self.soul, c_char_p(gbin_filename), c_char_p(mm_filename)) 
+        lgs.gSerialize(self.soul, gbin_filename, mm_filename)
+        
+    def deserialize(self, basename, mmap=False):
+        gbin_filename = "%s.gbin" % basename
+        mm_filename = "%s.gmm" % basename if mmap else None
+        self.check_destroyed()
+        t = now()
+        if not lgs.gDeserialize(self.soul, gbin_filename, mm_filename):
+            raise Exception("Deserialization failed; turn on logging in serialization.c");
+        print "Deserialized graph with %d vertices in %0.2fs" % (self.size, now() - t)
 
     def add_vertex(self, label):
         #Vertex* gAddVertex( Graph* this, char *label );

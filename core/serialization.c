@@ -20,6 +20,8 @@
 #define LOG(...) /* __VA_ARGS__ */
 #endif 
 
+#define MAX_MMSIZE 100*1024*1024
+
 /* Four-byte block to identify a Graphserver file and verify endianness of data */
 #define FILE_SIGNATURE 0xEDF15105 
 
@@ -112,16 +114,19 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 		sprintf(f_ind_name, "%s", mmf_name);
 	}
 	
-	if (mmf_name == NULL || (mmf = fopen(f_ind_name, "rb")) == NULL) {
-		LOG("mem map failed. could not open file graph\n");
-		mmf = NULL;
-		//Maybe they didn't want to memory map it?
+	if (mmf_name == NULL) {
+	  mmf = NULL;
 	} else {
-		LOG("deserializing memory mapped graph\n");
-		//okay they want to memory map. Lets do it.
-		//current hardcoded max of 100 mb mmaped file.
-		mm_data = mmap((caddr_t)0, 100*1024*1024, PROT_READ, MAP_SHARED, fileno(mmf), (off_t)0);
-		assert(mm_data != (void *)-1);
+	  if ((mmf = fopen(f_ind_name, "rb")) == NULL) {
+	    LOG("mem map failed. could not open file graph\n");
+	    fclose(f);
+	    return false;
+	  }
+	  LOG("deserializing memory mapped graph\n");
+	  //okay they want to memory map. Lets do it.
+	  //current hardcoded max of 100 mb mmaped file.
+	  mm_data = mmap((caddr_t)0, MAX_MMSIZE, PROT_READ, MAP_SHARED, fileno(mmf), (off_t)0);
+	  assert(mm_data != (void *)-1);
 	}
 	
 	// Read the file header to check platform compatibility
@@ -153,7 +158,14 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	LOG("sizof(double) for this file is %d.\n", type_size);
 	assert(type_size == sizeof(double)); 
     
-    
+	// was this written with a mmf?
+	FREAD_TYPE(flag, bool);
+	if (flag && !mmf) {
+	  fclose(f);
+	  LOG("Binary file '%s' requires a memory mapping file.\n");
+	  return false;
+	}
+	
 	//Read the # of vertices.
 	
 	FREAD_TYPE(num_vertices, long);
@@ -250,7 +262,9 @@ bool gSerialize(Graph *g, char* gbin_name, char * mmf_name) {
 	if (mmf_name && strlen(mmf_name)) {
 		sprintf(f_ind_name, "%s", mmf_name);
 		if ((mmf = fopen(f_ind_name, "wb")) == NULL) {
-			
+		  LOG("Failed to open memfile '%s'.\n", f_ind_name);
+		  fclose(f);
+		  return false;
 		}
 	} else {
 		mmf = NULL;
@@ -279,6 +293,10 @@ bool gSerialize(Graph *g, char* gbin_name, char * mmf_name) {
 	type_size = sizeof(double);
 	FWRITE_TYPE(type_size, uint8_t);
 	
+	// does this require a mmf when read?
+	flag = (mmf != NULL);
+	FWRITE_TYPE(flag, bool);
+
 	//calendars = (ServiceCalendar**)malloc(sizeof(ServiceCalendar*)*32);
 	//timezones = (Timezone**)malloc(sizeof(Timezone*)*32);
 	
