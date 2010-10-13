@@ -20,7 +20,8 @@
 #define LOG(...) /* __VA_ARGS__ */
 #endif 
 
-#define MAX_MMSIZE 100*1024*1024
+//current hardcoded max of 512 mb mmaped file.
+#define MAX_MMSIZE 512*1024*1024
 
 /* Four-byte block to identify a Graphserver file and verify endianness of data */
 #define FILE_SIGNATURE 0xEDF15105 
@@ -123,8 +124,6 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	    return false;
 	  }
 	  LOG("deserializing memory mapped graph\n");
-	  //okay they want to memory map. Lets do it.
-	  //current hardcoded max of 100 mb mmaped file.
 	  mm_data = mmap((caddr_t)0, MAX_MMSIZE, PROT_READ, MAP_SHARED, fileno(mmf), (off_t)0);
 	  assert(mm_data != (void *)-1);
 	}
@@ -739,99 +738,99 @@ alDeserialize(ServiceCalendar* calendar, Timezone* timezone, FILE* f, void* mm_d
 
 void
 tbSerialize(TripBoard* tb, FILE* f, FILE * mmf) {
-	BUFF_SIZE;
+  BUFF_SIZE;
 	
-	ServiceId service_id = tbGetServiceId(tb);
-	int agency = tbGetAgency(tb);
-	int trip_cnt = tb->n;
-	int overage = tbGetOverage(tb);	
+  ServiceId service_id = tbGetServiceId(tb);
+  int agency = tbGetAgency(tb);
+  int trip_cnt = tb->n;
+  int overage = tbGetOverage(tb);	
 	
-    FWRITE_TYPE(service_id, ServiceId);
-    FWRITE_TYPE(trip_cnt, int);
-    FWRITE_TYPE(agency, int);
-    FWRITE_TYPE(overage, int);
+  FWRITE_TYPE(service_id, ServiceId);
+  FWRITE_TYPE(trip_cnt, int);
+  FWRITE_TYPE(agency, int);
+  FWRITE_TYPE(overage, int);
 	
-	if (mmf) {
-		MM_POS_WRITING;
+  if (mmf) {
+    MM_POS_WRITING;
 		
-		int i;
-        for (i = 0; i < trip_cnt; i++) {
-            FWRITE_MM_POS;
-            MWRITE_STRING(tb->trip_ids[i]);
-        }
-        FWRITE_MM_POS;
-        for (i = 0; i < trip_cnt; i++) {
-            MWRITE_TYPE(tb->departs[i], int);
-        }
-		FWRITE_MM_POS;
-        for (i = 0; i < trip_cnt; i++) {
-            MWRITE_TYPE(tb->stop_sequences[i], int);
-        }
-	} else {
-        int i;
-        for (i = 0; i < trip_cnt; i++) {
-            FWRITE_STRING(tb->trip_ids[i],512);
-            FWRITE_TYPE(tb->departs[i],int);
-			FWRITE_TYPE(tb->stop_sequences[i],int);
-        }
-	}
+    int i;
+    for (i = 0; i < trip_cnt; i++) {
+      FWRITE_MM_POS;
+      MWRITE_STRING(tb->trip_ids[i]);
+    }
+    FWRITE_MM_POS;
+    for (i = 0; i < trip_cnt; i++) {
+      MWRITE_TYPE(tb->departs[i], int);
+    }
+    FWRITE_MM_POS;
+    for (i = 0; i < trip_cnt; i++) {
+      MWRITE_TYPE(tb->stop_sequences[i], int);
+    }
+  } else {
+    int i;
+    for (i = 0; i < trip_cnt; i++) {
+      FWRITE_STRING(tb->trip_ids[i],512);
+      FWRITE_TYPE(tb->departs[i],int);
+      FWRITE_TYPE(tb->stop_sequences[i],int);
+    }
+  }
 }
 
 EdgePayload*
 tbDeserialize(ServiceCalendar* calendar, Timezone* timezone, FILE* f, void* mm_data) {
-	LOG("tb deserialize")
+  LOG("tb deserialize");
 	
-	if (mm_data) {
-		MM_POS_READING;
+  if (mm_data) {
+    MM_POS_READING;
 		
-		ServiceId sid;
-	    int trip_cnt, agency;
+    ServiceId sid;
+    int trip_cnt, agency;
 		
-		FREAD_TYPE(sid, ServiceId);
-		FREAD_TYPE(trip_cnt, int);
-        FREAD_TYPE(agency, int);
+    FREAD_TYPE(sid, ServiceId);
+    FREAD_TYPE(trip_cnt, int);
+    FREAD_TYPE(agency, int);
 		
 		
-		TripBoard* tb = tbNew(sid, calendar, timezone, agency);
-        FREAD_TYPE(tb->overage, int);
+    TripBoard* tb = tbNew(sid, calendar, timezone, agency);
+    FREAD_TYPE(tb->overage, int);
 		
-        tb->n = trip_cnt;
-        tb->trip_ids = (char **)malloc(sizeof(char *)*trip_cnt);
+    tb->n = trip_cnt;
+    tb->trip_ids = (char **)malloc(sizeof(char *)*trip_cnt);
 		
-        int i;
-        for (i = 0; i < trip_cnt; i++) { //for each trip_id string
-            FREAD_MM_POS;
-            MREAD(tb->trip_ids[i], char); //point this cstring to the mmapped bytes.
-        }
+    int i;
+    for (i = 0; i < trip_cnt; i++) { //for each trip_id string
+      FREAD_MM_POS;
+      MREAD(tb->trip_ids[i], char); //point this cstring to the mmapped bytes.
+    }
 		
-        FREAD_MM_POS;
-        MREAD(tb->departs, int); //assign the address of the begining of the mmaped departure array
+    FREAD_MM_POS;
+    MREAD(tb->departs, int); //assign the address of the begining of the mmaped departure array
 		
-		FREAD_MM_POS;
-        MREAD(tb->stop_sequences, int); //assign the address of the begining of the mmaped departure array
+    FREAD_MM_POS;
+    MREAD(tb->stop_sequences, int); //assign the address of the begining of the mmaped departure array
 		
-        return (EdgePayload *)tb;
-	} else {
-        ServiceId sid;
-	    int trip_cnt, agency, departure, stop_sequence;
+    return (EdgePayload *)tb;
+  } else {
+    ServiceId sid;
+    int trip_cnt, agency, departure, stop_sequence;
 		
-        STRING_BUFF(trip_id, 512);
+    STRING_BUFF(trip_id, 512);
 		
-        FREAD_TYPE(sid, ServiceId);
-        FREAD_TYPE(trip_cnt, int);
-        FREAD_TYPE(agency, int);
-        TripBoard* tb = tbNew(sid, calendar, timezone, agency);
-        FREAD_TYPE(tb->overage, int);
+    FREAD_TYPE(sid, ServiceId);
+    FREAD_TYPE(trip_cnt, int);
+    FREAD_TYPE(agency, int);
+    TripBoard* tb = tbNew(sid, calendar, timezone, agency);
+    FREAD_TYPE(tb->overage, int);
         
-        int i;
-        for (i = 0; i < trip_cnt; i++) {
-            FREAD_STRING(trip_id);
-            FREAD_TYPE(departure, int);
-			FREAD_TYPE(stop_sequence, int);
-            tbAddBoarding(tb, trip_id, departure, stop_sequence);
-        }	
-        return (EdgePayload *)tb;
-	}
+    int i;
+    for (i = 0; i < trip_cnt; i++) {
+      FREAD_STRING(trip_id);
+      FREAD_TYPE(departure, int);
+      FREAD_TYPE(stop_sequence, int);
+      tbAddBoarding(tb, trip_id, departure, stop_sequence);
+    }	
+    return (EdgePayload *)tb;
+  }
 }
 
 
