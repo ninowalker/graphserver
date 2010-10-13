@@ -93,6 +93,7 @@ typedef enum {
 #include "path.h"
 #include "vector.h"
 #include "heap.h"
+#include "serialization.h"
 
 // things that everyone needs
 #include <stdlib.h>

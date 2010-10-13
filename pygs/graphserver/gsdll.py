@@ -1,7 +1,7 @@
 import atexit
 from ctypes import cdll, CDLL, pydll, PyDLL, CFUNCTYPE
 from ctypes import string_at, byref, c_int, c_long, c_float, c_size_t, c_char_p, c_double, c_void_p, py_object
-from ctypes import c_int8, c_int16, c_int32, c_int64, sizeof
+from ctypes import c_int8, c_int16, c_int32, c_int64, c_bool, sizeof
 from ctypes import Structure, pointer, cast, POINTER, addressof
 from ctypes.util import find_library
 
@@ -143,6 +143,8 @@ declarations = [\
     (lgs.gNew, LGSTypes.Graph, []),
     (lgs.gDestroyBasic, None, [LGSTypes.Graph, c_int]),
     (lgs.gDestroy, None, [LGSTypes.Graph]),
+    (lgs.gDeserialize, c_bool, [LGSTypes.Graph, c_char_p, c_char_p]),
+    (lgs.gSerialize, c_bool, [LGSTypes.Graph, c_char_p, c_char_p]),
     (lgs.gAddVertex, LGSTypes.Vertex, [LGSTypes.Graph, c_char_p]),
     (lgs.gRemoveVertex, None, [LGSTypes.Graph, c_char_p, c_int]),
     (lgs.gGetVertex, LGSTypes.Vertex, [LGSTypes.Graph, c_char_p]),

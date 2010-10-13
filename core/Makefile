@@ -34,7 +34,8 @@ OBJECTS= fibheap/dirfibheap.o \
     path.o \
     vector.o \
     contraction.o \
-    heap.o
+    heap.o \
+    serialization.o
 
 # You know what? Honestly? I don't know what most of these switches do.
 CFLAGS=-g -fno-strict-aliasing -O2 -fPIC -Wall
