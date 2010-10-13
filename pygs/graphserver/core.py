@@ -3,7 +3,7 @@ try:
 except ImportError:
     #so I can run this script from the same folder
     from gsdll import libc, lgs, cproperty, ccast, CShadow, instantiate, PayloadMethodTypes
-from ctypes import string_at, byref, c_int, c_long, c_size_t, c_char_p, c_double, c_void_p, py_object, c_float
+from ctypes import string_at, byref, c_int, c_long, c_size_t, c_char_p, c_double, c_void_p, py_object, c_float, c_bool
 from ctypes import Structure, pointer, cast, POINTER, addressof
 from _ctypes import Py_INCREF, Py_DECREF
 from time import asctime, gmtime
@@ -1070,6 +1070,7 @@ class Street(EdgePayload):
     fall = cproperty(lgs.streetGetFall, c_float, setter=lgs.streetSetFall)
     slog = cproperty(lgs.streetGetSlog, c_float, setter=lgs.streetSetSlog)
     way = cproperty(lgs.streetGetWay, c_long, setter=lgs.streetSetWay)
+    reverse_of_source = cproperty(lgs.streetGetReverseOfSource, c_bool)
     
     def __init__(self,name,length,rise=0,fall=0,reverse_of_source=False):
         self.soul = self._cnew(name, length, rise, fall,reverse_of_source)
@@ -1099,10 +1100,6 @@ class Street(EdgePayload):
         ret.way = way
         return ret
         
-    @property
-    def reverse_of_source(self):
-        return lgs.streetGetReverseOfSource(self.soul)==1
-
 class Egress(EdgePayload):
     length = cproperty(lgs.egressGetLength, c_double)
     name   = cproperty(lgs.egressGetName, c_char_p)

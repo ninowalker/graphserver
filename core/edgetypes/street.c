@@ -2,7 +2,7 @@
 
 //STREET FUNCTIONS
 Street*
-streetNew(const char *name, double length, int reverse_of_source) {
+streetNew(const char *name, double length, bool reverse_of_source) {
   Street* ret = (Street*)malloc(sizeof(Street));
   ret->external_id = 0;
   ret->type = PL_STREET;
@@ -23,7 +23,7 @@ streetNew(const char *name, double length, int reverse_of_source) {
 }
 
 Street*
-streetNewElev(const char *name, double length, float rise, float fall, int reverse_of_source) {
+streetNewElev(const char *name, double length, float rise, float fall, bool reverse_of_source) {
     Street* ret = streetNew( name, length, reverse_of_source );
     ret->rise = rise;
     ret->fall = fall;
@@ -86,7 +86,7 @@ streetSetWay(Street* this, long way) {
     this->way = way;
 }
 
-int
+bool
 streetGetReverseOfSource( Street *this ) {
     return this->reverse_of_source;
 }

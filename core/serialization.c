@@ -447,7 +447,7 @@ streetDeserialize(FILE* f, void* mm_data) {
 	float fall;
 	float slog;
 	long way;
-	int reverse;
+	bool reverse;
 	  
 	STRING_BUFF(name, 1024);
 	FREAD_STRING(name);
@@ -456,7 +456,7 @@ streetDeserialize(FILE* f, void* mm_data) {
 	FREAD_TYPE(fall, float);
 	FREAD_TYPE(slog, float);
 	FREAD_TYPE(way, long);
-	FREAD_TYPE(reverse, int);
+	FREAD_TYPE(reverse, bool);
 	Street* s = streetNewElev(name, s_len, rise, fall, reverse);
 	s->way = way;
 	s->slog = slog;
@@ -473,7 +473,7 @@ streetSerialize(Street* s, FILE* f, FILE* mmf) {
 	FWRITE_TYPE(s->fall, float);
 	FWRITE_TYPE(s->slog, float);
 	FWRITE_TYPE(s->way, long);
-	FWRITE_TYPE(s->reverse_of_source, int);
+	FWRITE_TYPE(s->reverse_of_source, bool);
 }
 
 void test_serialize(char* filename) {

@@ -42,6 +42,35 @@ class TestGraphSerialize(unittest.TestCase):
         self.assertEquals(self.g2.size, 2)
         print self.g2.vertices
         self.assertTrue(self.g2.get_vertex("A") != None)
+        self.assertEquals(len(self.g2.get_vertex("A").outgoing), 1)
+        self.assertEquals(len(self.g2.get_vertex("B").outgoing), 0)
+        self.assertEquals(len(self.g2.get_vertex("B").incoming), 1)
+        self.assertEquals(self.g2.get_vertex("A").outgoing[0].payload.__class__, Link)
+
+    def test_street_edge(self):
+        self.g1.add_vertex("A")
+        self.g1.add_vertex("B")
+        s1_args = ("s1", 2, 2, 2, False)
+        s2_args = ("s2", 3, 3, 3, True)
+        self.g1.add_edge("A","B", Street(*s1_args))
+        self.assertEquals(self.g1.get_vertex("A").outgoing[0].payload.reverse_of_source, False)
+        
+        self.g1.add_edge("B","A", Street(*s2_args))
+        self.inout()
+        self.assertEquals(self.g2.size, 2)
+        print self.g2.vertices
+        self.assertTrue(self.g2.get_vertex("A") != None)
+        self.assertEquals(len(self.g2.get_vertex("A").outgoing), 1)
+        self.assertEquals(len(self.g2.get_vertex("B").outgoing), 1)
+        self.assertEquals(len(self.g2.get_vertex("B").incoming), 1)
+        self.assertEquals(self.g2.get_vertex("A").outgoing[0].payload.__class__, Street)
+        s1 = self.g2.get_vertex("A").outgoing[0].payload
+        s2 = self.g2.get_vertex("B").outgoing[0].payload
+        self.assertEquals(s1.name, "s1")
+        for e,args in ((s1, s1_args), (s2, s2_args)):
+            for f,v in zip(("name","length","rise","fall","reverse_of_source"),args):
+                print f,v, getattr(e,f)
+                self.assertEquals(getattr(e,f), v)
 
 if __name__ == '__main__':
 
