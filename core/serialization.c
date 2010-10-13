@@ -108,7 +108,8 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	// open the index
 	sprintf(f_ind_name, "%s", gbin_name);
 	if ((f = fopen(f_ind_name, "rb")) == NULL) {
-		return false;
+	  LOG("Can't open '%s' graph file.\n", gbin_name);
+	  return false;
 	}
 	
 	if (mmf_name && strlen(mmf_name)) {
@@ -161,7 +162,7 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	FREAD_TYPE(flag, bool);
 	if (flag && !mmf) {
 	  fclose(f);
-	  LOG("Binary file '%s' requires a memory mapping file.\n");
+	  LOG("Binary file '%s' requires a memory mapping file.\n", gbin_name);
 	  return false;
 	}
 	
