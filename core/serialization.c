@@ -14,7 +14,7 @@
 #import "graph.h"
 
 /* The following hack allows for development debugging of the serialization code */
-#if 1
+#if 0
 #define LOG(...) printf(__VA_ARGS__);
 #else
 #define LOG(...) /* __VA_ARGS__ */
@@ -224,7 +224,7 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 
 bool gSerialize(Graph *g, char* gbin_name, char * mmf_name) {
 	
-	printf("mmf file name is %s", mmf_name);
+	LOG("mmf file name is %s", mmf_name);
 	
 	FILE *f, *mmf;
 	char f_ind_name[1024];
@@ -513,6 +513,7 @@ void test_ServiceCalendar_serialze(char * filename) {
 	f = fopen(filename, "rb");
 	ServiceCalendar * sc2 = scDeserialize(f,NULL);
 	LOG("read num_sides=%i", sc2->num_sids);
+	assert(sc2->num_sids == 2);
 	
 	//not yet finished
 	
@@ -537,78 +538,78 @@ elapseTimeSerialize(ElapseTime *e, FILE* f, FILE* mmf) {
 
 EdgePayload*
 crossingDeserialize(FILE* f, void* mm_data) {
-	if (mm_data) {
-		MM_POS_READING;
+  if (mm_data) {
+    MM_POS_READING;
 		
-	    int crossing_cnt;
-		FREAD_TYPE(crossing_cnt, int);
+    int crossing_cnt;
+    FREAD_TYPE(crossing_cnt, int);
 		
-		Crossing * cr = crNew();
-		//stoped here
+    Crossing * cr = crNew();
+    //stoped here
 		
 		
-        cr->n = crossing_cnt;
-        cr->crossing_time_trip_ids = (char **)malloc(sizeof(char *)*crossing_cnt);
+    cr->n = crossing_cnt;
+    cr->crossing_time_trip_ids = (char **)malloc(sizeof(char *)*crossing_cnt);
 		
-        int i;
-        for (i = 0; i < crossing_cnt; i++) { //for each trip_id string
-            FREAD_MM_POS;
-            MREAD(cr->crossing_time_trip_ids[i], char); //point this cstring to the mmapped bytes.
-        }
+    int i;
+    for (i = 0; i < crossing_cnt; i++) { //for each trip_id string
+      FREAD_MM_POS;
+      MREAD(cr->crossing_time_trip_ids[i], char); //point this cstring to the mmapped bytes.
+    }
 		
-        FREAD_MM_POS;
-        MREAD(cr->crossing_times, int); //assign the address of the begining of the mmaped crossing array
+    FREAD_MM_POS;
+    MREAD(cr->crossing_times, int); //assign the address of the begining of the mmaped crossing array
         
-        return (EdgePayload *)cr;
-	} else {
-	    int crossing_cnt, crossing_time;
+    return (EdgePayload *)cr;
+  } else {
+    int crossing_cnt, crossing_time;
 		
-        STRING_BUFF(crossing_trip_id, 512);
+    STRING_BUFF(crossing_trip_id, 512);
 		
-        FREAD_TYPE(crossing_cnt, int);
-		Crossing * cr = crNew();
+    FREAD_TYPE(crossing_cnt, int);
+    Crossing * cr = crNew();
         
-        int i;
-        for (i = 0; i < crossing_cnt; i++) {
-            FREAD_STRING(crossing_trip_id);
-            FREAD_TYPE(crossing_time, int);
-            crAddCrossingTime(cr, crossing_trip_id, crossing_time);
-        }	
-        return (EdgePayload *)cr;
-	}
-	// "i"
-//	int secs = 0;
-//	FREAD_TYPE(secs, int);
-//	return (EdgePayload*)crNew(secs);
+    int i;
+    for (i = 0; i < crossing_cnt; i++) {
+      FREAD_STRING(crossing_trip_id);
+      FREAD_TYPE(crossing_time, int);
+      crAddCrossingTime(cr, crossing_trip_id, crossing_time);
+    }	
+    return (EdgePayload *)cr;
+  }
+  // "i"
+  //	int secs = 0;
+  //	FREAD_TYPE(secs, int);
+  //	return (EdgePayload*)crNew(secs);
 }
 void
 crossingSerialize(Crossing *e, FILE* f, FILE* mmf) {	
-	// "l"
-	//FWRITE_TYPE(e->crossing_time, int);
-	BUFF_SIZE;
+  // "l"
+  //FWRITE_TYPE(e->crossing_time, int);
+  BUFF_SIZE;
 	
-	int crossing_cnt = e->n;	
-    FWRITE_TYPE(crossing_cnt, int);
+  int crossing_cnt = e->n;	
+  FWRITE_TYPE(crossing_cnt, int);
 	
-	if (mmf) {
-		MM_POS_WRITING;
+  if (mmf) {
+    MM_POS_WRITING;
 		
-		int i;
-        for (i = 0; i < crossing_cnt; i++) {
-            FWRITE_MM_POS;
-            MWRITE_STRING(e->crossing_time_trip_ids[i]);
-        }
-        FWRITE_MM_POS;
-        for (i = 0; i < crossing_cnt; i++) {
-            MWRITE_TYPE(e->crossing_times[i], int);
-        }
-	} else {
-        int i;
-        for (i = 0; i < crossing_cnt; i++) {
-            FWRITE_STRING(e->crossing_time_trip_ids[i],512);
-            FWRITE_TYPE(e->crossing_times[i],int);
-        }
-	}
+    int i;
+    for (i = 0; i < crossing_cnt; i++) {
+      FWRITE_MM_POS;
+      MWRITE_STRING(e->crossing_time_trip_ids[i]);
+    }
+    FWRITE_MM_POS;
+    for (i = 0; i < crossing_cnt; i++) {
+      MWRITE_TYPE(e->crossing_times[i], int);
+    }
+  } else {
+    int i;
+    for (i = 0; i < crossing_cnt; i++) {
+      FWRITE_STRING(e->crossing_time_trip_ids[i],512);
+      FWRITE_TYPE(e->crossing_times[i],int);
+    }
+  }
 	
 }
 
