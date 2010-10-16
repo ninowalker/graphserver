@@ -1,8 +1,8 @@
 try:
-    from graphserver.gsdll import libc, lgs, cproperty, ccast, CShadow, instantiate, PayloadMethodTypes
+    from graphserver.gsdll import libc, lgs, cproperty, ccast, CShadow, instantiate, PayloadMethodTypes, LGSTypes
 except ImportError:
     #so I can run this script from the same folder
-    from gsdll import libc, lgs, cproperty, ccast, CShadow, instantiate, PayloadMethodTypes
+    from gsdll import libc, lgs, cproperty, ccast, CShadow, instantiate, PayloadMethodTypes, LGSTypes
 from ctypes import string_at, byref, c_int, c_long, c_size_t, c_char_p, c_double, c_void_p, py_object, c_float, c_bool
 from ctypes import Structure, pointer, cast, POINTER, addressof
 from _ctypes import Py_INCREF, Py_DECREF
@@ -123,8 +123,18 @@ class Graph(CShadow):
         gbin_filename = "%s.gbin" % basename
         mm_filename = "%s.gmm" % basename if mmap else None
         self.check_destroyed()
-        lgs.gSerialize(self.soul, gbin_filename, mm_filename)
-        
+        r = lgs.gSerialize(self.soul, gbin_filename, mm_filename)
+        if r == LGSTypes.ENUM_serialization_status_code_t.OK:
+            return
+        if r == LGSTypes.ENUM_serialization_status_code_t.GRAPH_FILE_NOT_FOUND:
+            raise IOError(2, "No such file or directory: '%s'" % gbin_filename)
+        elif r == LGSTypes.ENUM_serialization_status_code_t.MMAP_FILE_NOT_FOUND:
+            raise IOError(2, "No such file or directory: '%s'" % mm_filename)
+        elif r == LGSTypes.ENUM_serialization_status_code_t.UNSUPPORTED_EDGE_TYPE:
+            raise Exception("Unable to serialize an edge. See STDIO output.");
+        else:
+            raise Exception("Unknown serialization error.")
+            
     def deserialize(self, basename, mmap=False):
         gbin_filename = "%s.gbin" % basename
         mm_filename = "%s.gmm" % basename if mmap else None

@@ -13,6 +13,8 @@
 #include "graphserver.h"
 #import "graph.h"
 
+DEFINE_ENUM_SIZE_CONST(serialization_status_code_t);
+
 /* The following hack allows for development debugging of the serialization code */
 #if 0
 #define LOG(...) printf(__VA_ARGS__);
@@ -82,7 +84,8 @@ void tzSerialize(Timezone* tz, FILE* f, FILE* mmf);
 
 void get_cal_and_tz(EdgePayload* payload, ServiceCalendar** sc, Timezone** tz);
 
-bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
+serialization_status_code_t
+gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	FILE *f, *mmf = NULL;
 	void * mm_data = NULL;
 	uint32_t endian_sig;
@@ -109,11 +112,11 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	sprintf(f_ind_name, "%s", gbin_name);
 	if ((f = fopen(f_ind_name, "rb")) == NULL) {
 	  LOG("Can't open '%s' graph file.\n", gbin_name);
-	  return false;
+	  return GRAPH_FILE_NOT_FOUND;
 	}
 	
 	if (mmf_name && strlen(mmf_name)) {
-		sprintf(f_ind_name, "%s", mmf_name);
+	  sprintf(f_ind_name, "%s", mmf_name);
 	}
 	
 	if (mmf_name == NULL) {
@@ -122,7 +125,7 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	  if ((mmf = fopen(f_ind_name, "rb")) == NULL) {
 	    LOG("mem map failed. could not open file graph\n");
 	    fclose(f);
-	    return false;
+	    return MMAP_FILE_NOT_FOUND;
 	  }
 	  LOG("deserializing memory mapped graph\n");
 	  mm_data = mmap((caddr_t)0, MAX_MMSIZE, PROT_READ, MAP_SHARED, fileno(mmf), (off_t)0);
@@ -163,7 +166,7 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	if (flag && !mmf) {
 	  fclose(f);
 	  LOG("Binary file '%s' requires a memory mapping file.\n", gbin_name);
-	  return false;
+	  return MMAP_FILE_NOT_FOUND;
 	}
 	
 	//Read the # of vertices.
@@ -219,8 +222,8 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 			case PL_HEADWAYALIGHT: __DESERIALIZE_W_CAL_TZ(hwa, calendars[cal_num], timezones[tz_num]); break;
 			case PL_ELAPSE_TIME: __DESERIALIZE(elapseTime); break;
 			default: 
-				assert(strcmp("Unsupported type","") == 0); // unsupported type
-				return false;
+			  //assert(strcmp("Unsupported type","") == 0); // unsupported type
+			  return SERIALIZATION_READ_ERROR;
 		}
 		LOG("End edge\n");
 		
@@ -231,10 +234,11 @@ bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	fclose(f);
 	fclose(mmf);
 	
-	return true;
+	return OK;
 }
 
-bool gSerialize(Graph *g, char* gbin_name, char * mmf_name) {
+serialization_status_code_t
+gSerialize(Graph *g, char* gbin_name, char * mmf_name) {
 	
 	LOG("mmf file name is %s", mmf_name);
 	
@@ -256,7 +260,7 @@ bool gSerialize(Graph *g, char* gbin_name, char * mmf_name) {
 	// open the index, get the number of vertices
 	sprintf(f_ind_name, "%s", gbin_name);
 	if ((f = fopen(f_ind_name, "wb")) == NULL) {
-		return false;
+		return GRAPH_FILE_NOT_FOUND;
 	}
 	
 	if (mmf_name && strlen(mmf_name)) {
@@ -264,7 +268,7 @@ bool gSerialize(Graph *g, char* gbin_name, char * mmf_name) {
 		if ((mmf = fopen(f_ind_name, "wb")) == NULL) {
 		  LOG("Failed to open memfile '%s'.\n", f_ind_name);
 		  fclose(f);
-		  return false;
+		  return MMAP_FILE_NOT_FOUND;
 		}
 	} else {
 		mmf = NULL;
@@ -416,8 +420,8 @@ bool gSerialize(Graph *g, char* gbin_name, char * mmf_name) {
 				case PL_HEADWAYALIGHT: __SERIALIZE(hwa, HeadwayAlight*, p); break;
 				case PL_ELAPSE_TIME: __SERIALIZE(elapseTime, ElapseTime*, p); break;
 				default: 
-					assert(NULL); // unsupported type
-					return false;
+				  //assert(NULL); // unsupported type
+				  return UNSUPPORTED_EDGE_TYPE;
 			}
 			LOG("Done edge\n");
 			out = out->next;
@@ -425,7 +429,7 @@ bool gSerialize(Graph *g, char* gbin_name, char * mmf_name) {
 	} //end for (i = 0; i < num_vertices; i++)
 	fclose(f);
 	
-	return true;
+	return OK;
 }
 
 void get_cal_and_tz(EdgePayload* payload, ServiceCalendar** sc, Timezone** tz) {

@@ -118,7 +118,16 @@ class LGSTypes:
         PL_ELAPSE_TIME = 14
         PL_COMBINATION = 15
 
-LGSTypes.edgepayload_t = {1:c_int8, 2:c_int16, 4:c_int32, 8:c_int64}[c_size_t.in_dll(lgs, "EDGEPAYLOAD_ENUM_SIZE").value]
+    class ENUM_serialization_status_code_t:
+        OK = 0
+        GRAPH_FILE_NOT_FOUND = 1
+        MMAP_FILE_NOT_FOUND = 2 
+        UNSUPPORTED_EDGE_TYPE = 3
+        SERIALIZATION_READ_ERROR = 4
+
+for enum in ('edgepayload_t','serialization_status_code_t'):
+    setattr(LGSTypes, enum, {1:c_int8, 2:c_int16, 4:c_int32, 8:c_int64}[c_size_t.in_dll(lgs, "ENUM_SIZE__%s" % enum).value])
+
 declarations = [\
     (lgs.chpNew, LGSTypes.CHPath, [c_int, c_long]),
     (lgs.chpLength, c_int, [LGSTypes.CHPath]),
@@ -143,8 +152,8 @@ declarations = [\
     (lgs.gNew, LGSTypes.Graph, []),
     (lgs.gDestroyBasic, None, [LGSTypes.Graph, c_int]),
     (lgs.gDestroy, None, [LGSTypes.Graph]),
-    (lgs.gDeserialize, c_bool, [LGSTypes.Graph, c_char_p, c_char_p]),
-    (lgs.gSerialize, c_bool, [LGSTypes.Graph, c_char_p, c_char_p]),
+    (lgs.gDeserialize, LGSTypes.serialization_status_code_t, [LGSTypes.Graph, c_char_p, c_char_p]),
+    (lgs.gSerialize, LGSTypes.serialization_status_code_t, [LGSTypes.Graph, c_char_p, c_char_p]),
     (lgs.gAddVertex, LGSTypes.Vertex, [LGSTypes.Graph, c_char_p]),
     (lgs.gRemoveVertex, None, [LGSTypes.Graph, c_char_p, c_int]),
     (lgs.gGetVertex, LGSTypes.Vertex, [LGSTypes.Graph, c_char_p]),

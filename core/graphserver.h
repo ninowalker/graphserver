@@ -8,6 +8,8 @@
 #define TRUE 1
 #define FALSE 0
 
+#define DEFINE_ENUM_SIZE_CONST(en) const size_t ENUM_SIZE__ ## en = sizeof(en)
+
 typedef int ServiceId;
 
 // generally useful classes

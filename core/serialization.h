@@ -14,6 +14,15 @@
 //#include "statetypes.h"
 //#include "graph.h"
 #include "graphserver.h"
-bool gDeserialize(Graph *g, char* gbin_name, char * mmf_name);
-bool gSerialize(Graph *g, char* gbin_name, char * mmf_name) ;
+
+typedef enum {
+  OK,
+  GRAPH_FILE_NOT_FOUND,
+  MMAP_FILE_NOT_FOUND,
+  UNSUPPORTED_EDGE_TYPE,
+  SERIALIZATION_READ_ERROR
+} serialization_status_code_t;
+
+serialization_status_code_t gDeserialize(Graph *g, char* gbin_name, char * mmf_name);
+serialization_status_code_t gSerialize(Graph *g, char* gbin_name, char * mmf_name) ;
 #endif

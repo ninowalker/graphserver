@@ -1,4 +1,4 @@
-from graphserver.core import Vertex, Edge, Link, Street, Graph
+from graphserver.core import Vertex, Edge, Link, Street, Graph, NoOpPyPayload
 import unittest
 from graphserver.gsdll import lgs
 from tempfile import NamedTemporaryFile
@@ -27,6 +27,14 @@ class TestGraphSerialize(unittest.TestCase):
         lgs.gSerialize(self.g1.soul, self.out1.name, self.out2.name)
         lgs.gDeserialize(self.g2.soul, self.out1.name, self.out2.name)
     
+
+    def test_errors(self):
+       self.assertRaises(IOError, self.g1.serialize, "/dev/asdfafsdaf")
+       self.assertRaises(IOError, self.g1.serialize, "/dev/asdfafsdaf", True)
+       self.g1.add_vertices(('a','b'))
+       self.g1.add_edge('a','b', NoOpPyPayload(5))
+       self.assertRaises(Exception, self.g1.serialize, self.out1.name)
+
     def test_vertices(self):
         nv = 10
         for i in xrange(10):
