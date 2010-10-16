@@ -140,8 +140,21 @@ class Graph(CShadow):
         mm_filename = "%s.gmm" % basename if mmap else None
         self.check_destroyed()
         t = now()
-        if not lgs.gDeserialize(self.soul, gbin_filename, mm_filename):
-            raise Exception("Deserialization failed; turn on logging in serialization.c");
+        r = lgs.gDeserialize(self.soul, gbin_filename, mm_filename)
+        if r == LGSTypes.ENUM_serialization_status_code_t.OK:
+            return
+        if r == LGSTypes.ENUM_serialization_status_code_t.GRAPH_FILE_NOT_FOUND:
+            raise IOError(2, "No such file or directory: '%s'" % gbin_filename)
+        elif r == LGSTypes.ENUM_serialization_status_code_t.MMAP_FILE_NOT_FOUND:
+            raise IOError(2, "No such file or directory: '%s'" % mm_filename)
+        elif r == LGSTypes.ENUM_serialization_status_code_t.UNSUPPORTED_EDGE_TYPE:
+            raise Exception("Unable to serialize an edge. See STDIO output.")
+        elif r == LGSTypes.ENUM_serialization_status_code_t.BAD_FILE_SIG:
+            raise IOError(-1, "File signature is bad; either it is corrupt, or built on an incompatible platform.")
+        elif r == LGSTypes.ENUM_serialization_status_code_t.BINARY_INCOMPATIBILITY:
+            raise IOError(-1, "Graph file was built on an incompatible platform.")
+        else:
+            raise Exception("Unknown serialization error.")
         print "Deserialized graph with %d vertices in %0.2fs" % (self.size, now() - t)
 
     def add_vertex(self, label):

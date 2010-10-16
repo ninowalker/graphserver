@@ -20,7 +20,9 @@ typedef enum {
   GRAPH_FILE_NOT_FOUND,
   MMAP_FILE_NOT_FOUND,
   UNSUPPORTED_EDGE_TYPE,
-  SERIALIZATION_READ_ERROR
+  SERIALIZATION_READ_ERROR,
+  BAD_FILE_SIG,
+  BINARY_INCOMPATIBILITY
 } serialization_status_code_t;
 
 serialization_status_code_t gDeserialize(Graph *g, char* gbin_name, char * mmf_name);

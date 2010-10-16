@@ -16,7 +16,7 @@
 DEFINE_ENUM_SIZE_CONST(serialization_status_code_t);
 
 /* The following hack allows for development debugging of the serialization code */
-#if 0
+#if 1
 #define LOG(...) printf(__VA_ARGS__);
 #else
 #define LOG(...) /* __VA_ARGS__ */
@@ -84,6 +84,13 @@ void tzSerialize(Timezone* tz, FILE* f, FILE* mmf);
 
 void get_cal_and_tz(EdgePayload* payload, ServiceCalendar** sc, Timezone** tz);
 
+#define SERIAL_ASSERT_BINARY_COMPATIBILTY(btype) \
+	FREAD_TYPE(type_size, uint8_t); \
+	if (type_size != sizeof(btype)) { \
+  	  LOG("ERROR: sizeof(" # btype ") for this file is %d; for this platform %ld.\n", type_size, sizeof(btype)); \
+          return BINARY_INCOMPATIBILITY; \
+	}
+
 serialization_status_code_t
 gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	FILE *f, *mmf = NULL;
@@ -137,30 +144,18 @@ gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 	// Read a 32 bit integer as signature and check endianness
 	FREAD_TYPE(endian_sig, uint32_t);
 	LOG("signature is %08x.\n", endian_sig);
-	assert(endian_sig == FILE_SIGNATURE); 
-	
+	if (endian_sig != FILE_SIGNATURE) {
+	  return BAD_FILE_SIG;
+	}
+
 	// Read the size of all types
-	// Exact-size type substitutions and sizeof are evaluated at compile time
-	FREAD_TYPE(type_size, uint8_t);
-	LOG("sizof(char) for this file is %d.\n", type_size);
-	assert(type_size == sizeof(char)); 
+	// Exact-size type substitutions and sizeof are evaluated at compile time	
+	SERIAL_ASSERT_BINARY_COMPATIBILTY(char);
+	SERIAL_ASSERT_BINARY_COMPATIBILTY(int);
+	SERIAL_ASSERT_BINARY_COMPATIBILTY(long);
+	SERIAL_ASSERT_BINARY_COMPATIBILTY(float);
+	SERIAL_ASSERT_BINARY_COMPATIBILTY(double);
 	
-	FREAD_TYPE(type_size, uint8_t);
-	LOG("sizof(int) for this file is %d.\n", type_size);
-	assert(type_size == sizeof(int)); 
-	
-	FREAD_TYPE(type_size, uint8_t);
-	LOG("sizof(long) for this file is %d.\n", type_size);
-	assert(type_size == sizeof(long)); 
-	
-	FREAD_TYPE(type_size, uint8_t);
-	LOG("sizof(float) for this file is %d.\n", type_size);
-	assert(type_size == sizeof(float)); 
-	
-	FREAD_TYPE(type_size, uint8_t);
-	LOG("sizof(double) for this file is %d.\n", type_size);
-	assert(type_size == sizeof(double)); 
-    
 	// was this written with a mmf?
 	FREAD_TYPE(flag, bool);
 	if (flag && !mmf) {
@@ -239,8 +234,8 @@ gDeserialize(Graph *g, char* gbin_name, char * mmf_name) {
 
 serialization_status_code_t
 gSerialize(Graph *g, char* gbin_name, char * mmf_name) {
-	
-	LOG("mmf file name is %s", mmf_name);
+        LOG("bin file name is %s\n", gbin_name);
+	LOG("mmf file name is %s\n", mmf_name);
 	
 	FILE *f, *mmf;
 	char f_ind_name[1024];

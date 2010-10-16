@@ -34,6 +34,16 @@ class TestGraphSerialize(unittest.TestCase):
        self.g1.add_vertices(('a','b'))
        self.g1.add_edge('a','b', NoOpPyPayload(5))
        self.assertRaises(Exception, self.g1.serialize, self.out1.name)
+       self.g2.add_vertices(('a','b'))
+       self.g2.add_edge('a','b', Link())
+       self.g2.serialize("cows")
+       # bad sig
+       with open("cows.gbin", 'r+b') as foo:
+           foo.seek(1)
+           foo.write("afdasdf")
+       self.assertRaises(IOError, self.g1.deserialize, "cows")
+       # bad file
+       self.assertRaises(IOError, self.g1.deserialize, self.out2.name)
 
     def test_vertices(self):
         nv = 10

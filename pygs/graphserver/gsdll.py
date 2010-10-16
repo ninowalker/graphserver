@@ -124,6 +124,8 @@ class LGSTypes:
         MMAP_FILE_NOT_FOUND = 2 
         UNSUPPORTED_EDGE_TYPE = 3
         SERIALIZATION_READ_ERROR = 4
+        BAD_FILE_SIG = 5
+        BINARY_INCOMPATIBILITY = 6
 
 for enum in ('edgepayload_t','serialization_status_code_t'):
     setattr(LGSTypes, enum, {1:c_int8, 2:c_int16, 4:c_int32, 8:c_int64}[c_size_t.in_dll(lgs, "ENUM_SIZE__%s" % enum).value])
