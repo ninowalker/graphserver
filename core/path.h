@@ -9,13 +9,13 @@ Path *
 pathNew( Vertex* origin, int init_size, int expand_delta );
 
 void
-pathDestroy(Path *this);
+pathDestroy(Path *self);
 
 Vertex *
-pathGetVertex( Path *this, int i );
+pathGetVertex( Path *self, int i );
 
 Edge *
-pathGetEdge( Path *this, int i );
+pathGetEdge( Path *self, int i );
 
 void
-pathAddSegment( Path *this, Vertex *vertex, Edge *edge );
+pathAddSegment( Path *self, Vertex *vertex, Edge *edge );

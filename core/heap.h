@@ -14,14 +14,14 @@ struct Heap {
 
 Heap* heapNew( int init_capacity ) ;
 
-void heapDestroy( Heap* this ) ;
+void heapDestroy( Heap* self ) ;
 
-void heapInsert( Heap* this, void* payload, long priority ) ;
+void heapInsert( Heap* self, void* payload, long priority ) ;
 
-int heapEmpty( Heap* this ) ;
+int heapEmpty( Heap* self ) ;
 
-void* heapMin( Heap* this, long* priority ) ;
+void* heapMin( Heap* self, long* priority ) ;
 
-void* heapPop( Heap* this, long* priority ) ;
+void* heapPop( Heap* self, long* priority ) ;
 
 #endif

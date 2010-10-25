@@ -21,24 +21,24 @@ defineCustomPayloadType(void (*destroy)(void*),
 
 
 void
-undefineCustomPayloadType( PayloadMethods* this );
+undefineCustomPayloadType( PayloadMethods* self );
 
 CustomPayload*
 cpNew( void* soul, PayloadMethods* methods );
 
 void
-cpDestroy( CustomPayload* this );
+cpDestroy( CustomPayload* self );
 
 void*
-cpSoul( CustomPayload* this );
+cpSoul( CustomPayload* self );
 
 PayloadMethods*
-cpMethods( CustomPayload* this );
+cpMethods( CustomPayload* self );
 
 State*
-cpWalk(CustomPayload* this, State* state, WalkOptions* walkoptions);
+cpWalk(CustomPayload* self, State* state, WalkOptions* walkoptions);
 
 State*
-cpWalkBack(CustomPayload* this, State* state, WalkOptions* walkoptions);
+cpWalkBack(CustomPayload* self, State* state, WalkOptions* walkoptions);
 
 #endif

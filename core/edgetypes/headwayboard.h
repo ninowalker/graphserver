@@ -24,31 +24,31 @@ HeadwayBoard*
 hbNew(  ServiceId service_id, ServiceCalendar* calendar, Timezone* timezone, int agency, char* trip_id, int start_time, int end_time, int headway_secs );
 
 void
-hbDestroy(HeadwayBoard* this);
+hbDestroy(HeadwayBoard* self);
 
 ServiceCalendar*
-hbGetCalendar( HeadwayBoard* this );
+hbGetCalendar( HeadwayBoard* self );
 
 Timezone*
-hbGetTimezone( HeadwayBoard* this );
+hbGetTimezone( HeadwayBoard* self );
 
 int
-hbGetAgency( HeadwayBoard* this );
+hbGetAgency( HeadwayBoard* self );
 
 ServiceId
-hbGetServiceId( HeadwayBoard* this );
+hbGetServiceId( HeadwayBoard* self );
 
 char*
-hbGetTripId( HeadwayBoard* this );
+hbGetTripId( HeadwayBoard* self );
 
 int
-hbGetStartTime( HeadwayBoard* this );
+hbGetStartTime( HeadwayBoard* self );
 
 int
-hbGetEndTime( HeadwayBoard* this );
+hbGetEndTime( HeadwayBoard* self );
 
 int
-hbGetHeadwaySecs( HeadwayBoard* this );
+hbGetHeadwaySecs( HeadwayBoard* self );
 
 inline State*
 hbWalk( EdgePayload* superthis, State* state, WalkOptions* options );

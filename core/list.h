@@ -18,18 +18,18 @@ liNew(Edge *data);
  * append an existing list node after the given list node
  */
 void
-liInsertAfter( ListNode *this, ListNode *add) ;
+liInsertAfter( ListNode *self, ListNode *add) ;
 
 void
-liRemoveAfter( ListNode *this ) ;
+liRemoveAfter( ListNode *self ) ;
 
 void
 liRemoveRef( ListNode *dummyhead, Edge* data );
 
 Edge*
-liGetData( ListNode *this );
+liGetData( ListNode *self );
 
 ListNode*
-liGetNext( ListNode *this );
+liGetNext( ListNode *self );
 
 #endif

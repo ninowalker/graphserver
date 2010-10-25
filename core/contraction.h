@@ -14,11 +14,11 @@ struct CH {
 
 CHPath* chpNew( int n, long length ) ;
 
-int chpLength( CHPath* this ) ;
+int chpLength( CHPath* self ) ;
 
 CHPath* chpCombine( CHPath* a, CHPath* b ) ;
 
-void chpDestroy( CHPath* this ) ;
+void chpDestroy( CHPath* self ) ;
     
 CHPath* dist( Graph *gg, char* from_v_label, char* to_v_label, WalkOptions *wo, int weightlimit, int return_full_path ) ;
 
@@ -34,6 +34,6 @@ CH* get_contraction_hierarchies(Graph* gg, WalkOptions* wo, int search_limit) ;
 
 CH* chNew(void);
 
-Graph* chUpGraph( CH* this ) ;
+Graph* chUpGraph( CH* self ) ;
 
-Graph* chDownGraph( CH* this ) ;
+Graph* chDownGraph( CH* self ) ;

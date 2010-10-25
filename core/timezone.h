@@ -12,42 +12,42 @@ Timezone*
 tzNew(void);
 
 void
-tzAddPeriod( Timezone* this, TimezonePeriod* period );
+tzAddPeriod( Timezone* self, TimezonePeriod* period );
 
 TimezonePeriod*
-tzPeriodOf( Timezone* this, long time);
+tzPeriodOf( Timezone* self, long time);
 
 int
-tzUtcOffset( Timezone* this, long time);
+tzUtcOffset( Timezone* self, long time);
 
 int
-tzTimeSinceMidnight( Timezone* this, long time );
+tzTimeSinceMidnight( Timezone* self, long time );
 
 TimezonePeriod*
-tzHead( Timezone* this );
+tzHead( Timezone* self );
 
 void
-tzDestroy( Timezone* this );
+tzDestroy( Timezone* self );
 
 TimezonePeriod*
 tzpNew( long begin_time, long end_time, int utc_offset );
 
 void
-tzpDestroy( TimezonePeriod* this );
+tzpDestroy( TimezonePeriod* self );
 
 int
-tzpUtcOffset( TimezonePeriod* this );
+tzpUtcOffset( TimezonePeriod* self );
 
 int
-tzpTimeSinceMidnight( TimezonePeriod* this, long time );
+tzpTimeSinceMidnight( TimezonePeriod* self, long time );
 
 long
-tzpBeginTime( TimezonePeriod* this );
+tzpBeginTime( TimezonePeriod* self );
 
 long
-tzpEndTime( TimezonePeriod* this );
+tzpEndTime( TimezonePeriod* self );
 
 TimezonePeriod*
-tzpNextPeriod(TimezonePeriod* this);
+tzpNextPeriod(TimezonePeriod* self);
 
 #endif

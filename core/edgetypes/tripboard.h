@@ -28,43 +28,43 @@ TripBoard*
 tbNew( ServiceId service_id, ServiceCalendar* calendar, Timezone* timezone, int agency );
 
 void
-tbDestroy(TripBoard* this);
+tbDestroy(TripBoard* self);
 
 ServiceCalendar*
-tbGetCalendar( TripBoard* this );
+tbGetCalendar( TripBoard* self );
 
 Timezone*
-tbGetTimezone( TripBoard* this );
+tbGetTimezone( TripBoard* self );
 
 int
-tbGetAgency( TripBoard* this );
+tbGetAgency( TripBoard* self );
 
 ServiceId
-tbGetServiceId( TripBoard* this );
+tbGetServiceId( TripBoard* self );
 
 int
-tbGetNumBoardings(TripBoard* this);
+tbGetNumBoardings(TripBoard* self);
 
 void
-tbAddBoarding(TripBoard* this, char* trip_id, int depart, int stop_sequence);
+tbAddBoarding(TripBoard* self, char* trip_id, int depart, int stop_sequence);
 
 char*
-tbGetBoardingTripId(TripBoard* this, int i);
+tbGetBoardingTripId(TripBoard* self, int i);
 
 int
-tbGetBoardingDepart(TripBoard* this, int i);
+tbGetBoardingDepart(TripBoard* self, int i);
 
 int
-tbGetBoardingStopSequence(TripBoard* this, int i);
+tbGetBoardingStopSequence(TripBoard* self, int i);
 
 int
-tbSearchBoardingsList(TripBoard* this, int time);
+tbSearchBoardingsList(TripBoard* self, int time);
 
 int
-tbGetNextBoardingIndex(TripBoard* this, int time);
+tbGetNextBoardingIndex(TripBoard* self, int time);
 
 int
-tbGetOverage(TripBoard* this);
+tbGetOverage(TripBoard* self);
 
 inline State*
 tbWalk( EdgePayload* superthis, State* state, WalkOptions* options );
@@ -73,6 +73,6 @@ inline State*
 tbWalkBack( EdgePayload* superthis, State* state, WalkOptions* options );
 
 int
-tbGetBoardingIndexByTripId(TripBoard* this, char* trip_id);
+tbGetBoardingIndexByTripId(TripBoard* self, char* trip_id);
 
 #endif

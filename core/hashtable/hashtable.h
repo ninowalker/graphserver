@@ -36,7 +36,7 @@ struct hashtable;
  * 
  * Example:
  *
- * Insert this at the start of your file:
+ * Insert self at the start of your file:
  *
  * DEFINE_HASHTABLE_INSERT(insert_some, struct some_key, struct some_value);
  * DEFINE_HASHTABLE_SEARCH(search_some, struct some_key, struct some_value);
@@ -53,7 +53,7 @@ struct hashtable;
  * a difficult issue as they're only defined and passed once, and the other
  * functions will ensure that only valid keys are supplied to them.
  *
- * The cost for this checking is increased code size and runtime overhead
+ * The cost for self checking is increased code size and runtime overhead
  * - if performance is important, it may be worth switching back to the
  * unsafe methods once your program has been debugged with the safe methods.
  * This just requires switching to some simple alternative defines - eg:
@@ -174,14 +174,14 @@ hashtable_destroy(struct hashtable *h, int free_values);
  * are met:
  * 
  * * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
+ * notice, self list of conditions and the following disclaimer.
  * 
  * * Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
+ * notice, self list of conditions and the following disclaimer in the
  * documentation and/or other materials provided with the distribution.
  * 
  * * Neither the name of the original author; nor the names of any contributors
- * may be used to endorse or promote products derived from this software
+ * may be used to endorse or promote products derived from self software
  * without specific prior written permission.
  * 
  * 

@@ -26,9 +26,9 @@ inline State*
 egressWalkBack(EdgePayload* superthis, State* state, WalkOptions* options);
 
 char*
-egressGetName(Egress* this);
+egressGetName(Egress* self);
 
 double
-egressGetLength(Egress* this);
+egressGetLength(Egress* self);
 
 #endif

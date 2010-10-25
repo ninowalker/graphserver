@@ -54,44 +54,44 @@ Graph*
 gNew(void);
 
 void
-gDestroyBasic( Graph* this, int free_edge_payloads );
+gDestroyBasic( Graph* self, int free_edge_payloads );
 
 void
-gDestroy( Graph* this );
+gDestroy( Graph* self );
 
 Vertex*
-gAddVertex( Graph* this, char *label );
+gAddVertex( Graph* self, char *label );
 
 void
-gRemoveVertex( Graph* this, char *label, int free_edge_payloads );
+gRemoveVertex( Graph* self, char *label, int free_edge_payloads );
 
 Vertex*
-gGetVertex( Graph* this, char *label );
+gGetVertex( Graph* self, char *label );
 
 void
-gAddVertices( Graph* this, char **labels, int n );
+gAddVertices( Graph* self, char **labels, int n );
 
 Edge*
-gAddEdge( Graph* this, char *from, char *to, EdgePayload *payload );
+gAddEdge( Graph* self, char *from, char *to, EdgePayload *payload );
 
 Vertex**
-gVertices( Graph* this, long* num_vertices );
+gVertices( Graph* self, long* num_vertices );
 
 ShortestPathTree*
-gShortestPathTree( Graph* this, char *from, char *to, State* init_state, WalkOptions* options, long maxtime, int hoplimit, long weightlimit );
+gShortestPathTree( Graph* self, char *from, char *to, State* init_state, WalkOptions* options, long maxtime, int hoplimit, long weightlimit );
 
 ShortestPathTree*
-gShortestPathTreeRetro( Graph* this, char *from, char *to, State* init_state, WalkOptions* options, long mintime, int hoplimit, long weightlimit );
+gShortestPathTreeRetro( Graph* self, char *from, char *to, State* init_state, WalkOptions* options, long mintime, int hoplimit, long weightlimit );
 
 //direction specifies forward or retro routing
 State*
-gShortestPath( Graph* this, char *from, char *to, State* init_state, int direction, long *size, WalkOptions* options, long timelimit, int hoplimit, long weightlimit );
+gShortestPath( Graph* self, char *from, char *to, State* init_state, int direction, long *size, WalkOptions* options, long timelimit, int hoplimit, long weightlimit );
 
 long
-gSize( Graph* this );
+gSize( Graph* self );
 
 void
-gSetVertexEnabled( Graph *this, char *label, int enabled );
+gSetVertexEnabled( Graph *self, char *label, int enabled );
 
 //SPT METHODS
 
@@ -99,25 +99,25 @@ ShortestPathTree*
 sptNew(void);
 
 void
-sptDestroy( ShortestPathTree *this );
+sptDestroy( ShortestPathTree *self );
 
 SPTVertex*
-sptAddVertex( ShortestPathTree *this, Vertex *mirror, int hop );
+sptAddVertex( ShortestPathTree *self, Vertex *mirror, int hop );
 
 void
-sptRemoveVertex( ShortestPathTree *this, char *label );
+sptRemoveVertex( ShortestPathTree *self, char *label );
 
 SPTVertex*
-sptGetVertex( ShortestPathTree *this, char *label );
+sptGetVertex( ShortestPathTree *self, char *label );
 
 Edge*
-sptAddEdge( ShortestPathTree *this, char *from, char *to, EdgePayload *payload );
+sptAddEdge( ShortestPathTree *self, char *from, char *to, EdgePayload *payload );
 
 SPTVertex**
-sptVertices( ShortestPathTree *this, long* num_vertices );
+sptVertices( ShortestPathTree *self, long* num_vertices );
 
 long
-sptSize( ShortestPathTree* this );
+sptSize( ShortestPathTree* self );
 
 Path *
 sptPathRetro(Graph* g, char* origin_label);
@@ -128,38 +128,38 @@ Vertex *
 vNew( char* label ) ;
 
 void
-vDestroy(Vertex* this, int free_edge_payloads) ;
+vDestroy(Vertex* self, int free_edge_payloads) ;
 
 // TODO
 //void
-//vMark(Vertex* this) ;
+//vMark(Vertex* self) ;
 
 Edge*
-vLink(Vertex* this, Vertex* to, EdgePayload* payload) ;
+vLink(Vertex* self, Vertex* to, EdgePayload* payload) ;
 
 Edge*
-vSetParent( Vertex* this, Vertex* parent, EdgePayload* payload );
+vSetParent( Vertex* self, Vertex* parent, EdgePayload* payload );
 
 inline ListNode*
-vGetOutgoingEdgeList( Vertex* this );
+vGetOutgoingEdgeList( Vertex* self );
 
 inline ListNode*
-vGetIncomingEdgeList( Vertex* this );
+vGetIncomingEdgeList( Vertex* self );
 
 void
-vRemoveOutEdgeRef( Vertex* this, Edge* todie );
+vRemoveOutEdgeRef( Vertex* self, Edge* todie );
 
 void
-vRemoveInEdgeRef( Vertex* this, Edge* todie );
+vRemoveInEdgeRef( Vertex* self, Edge* todie );
 
 char*
-vGetLabel( Vertex* this );
+vGetLabel( Vertex* self );
 
 int
-vDegreeOut( Vertex* this );
+vDegreeOut( Vertex* self );
 
 int
-vDegreeIn( Vertex* this );
+vDegreeIn( Vertex* self );
 
 //SPTVERTEX FUNCTIONS
 
@@ -167,46 +167,46 @@ SPTVertex *
 sptvNew( Vertex* mirror, int hop ) ;
 
 void
-sptvDestroy(SPTVertex* this) ;
+sptvDestroy(SPTVertex* self) ;
 
 Edge*
-sptvLink(SPTVertex* this, SPTVertex* to, EdgePayload* payload) ;
+sptvLink(SPTVertex* self, SPTVertex* to, EdgePayload* payload) ;
 
 Edge*
-sptvSetParent( SPTVertex* this, SPTVertex* parent, EdgePayload* payload );
+sptvSetParent( SPTVertex* self, SPTVertex* parent, EdgePayload* payload );
 
 inline ListNode*
-sptvGetOutgoingEdgeList( SPTVertex* this );
+sptvGetOutgoingEdgeList( SPTVertex* self );
 
 inline ListNode*
-sptvGetIncomingEdgeList( SPTVertex* this );
+sptvGetIncomingEdgeList( SPTVertex* self );
 
 void
-sptvRemoveOutEdgeRef( SPTVertex* this, Edge* todie );
+sptvRemoveOutEdgeRef( SPTVertex* self, Edge* todie );
 
 void
-sptvRemoveInEdgeRef( SPTVertex* this, Edge* todie );
+sptvRemoveInEdgeRef( SPTVertex* self, Edge* todie );
 
 char*
-sptvGetLabel( SPTVertex* this );
+sptvGetLabel( SPTVertex* self );
 
 int
-sptvDegreeOut( SPTVertex* this );
+sptvDegreeOut( SPTVertex* self );
 
 int
-sptvDegreeIn( SPTVertex* this );
+sptvDegreeIn( SPTVertex* self );
 
 State*
-sptvState( SPTVertex* this );
+sptvState( SPTVertex* self );
 
 int
-sptvHop( SPTVertex* this );
+sptvHop( SPTVertex* self );
 
 Edge*
-sptvGetParent( SPTVertex* this );
+sptvGetParent( SPTVertex* self );
 
 Vertex*
-sptvMirror( SPTVertex* this );
+sptvMirror( SPTVertex* self );
 
 //EDGE FUNCTIONS
 
@@ -214,31 +214,31 @@ Edge*
 eNew(Vertex* from, Vertex* to, EdgePayload* payload);
 
 void
-eDestroy(Edge *this, int destroy_payload) ;
+eDestroy(Edge *self, int destroy_payload) ;
 
 // TODO
 //void
-//eMark(Edge *this) ;
+//eMark(Edge *self) ;
 
 State*
-eWalk(Edge *this, State* state, WalkOptions* options) ;
+eWalk(Edge *self, State* state, WalkOptions* options) ;
 
 State*
-eWalkBack(Edge *this, State *state, WalkOptions* options) ;
+eWalkBack(Edge *self, State *state, WalkOptions* options) ;
 
 Vertex*
-eGetFrom(Edge *this);
+eGetFrom(Edge *self);
 
 Vertex*
-eGetTo(Edge *this);
+eGetTo(Edge *self);
 
 EdgePayload*
-eGetPayload(Edge *this);
+eGetPayload(Edge *self);
 
 int
-eGetEnabled(Edge *this);
+eGetEnabled(Edge *self);
 
 void
-eSetEnabled(Edge *this, int enabled);
+eSetEnabled(Edge *self, int enabled);
 
 #endif

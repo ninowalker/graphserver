@@ -31,56 +31,56 @@ ServiceCalendar*
 scNew(void);
 
 int
-scAddServiceId( ServiceCalendar* this, char* service_id );
+scAddServiceId( ServiceCalendar* self, char* service_id );
 
 char*
-scGetServiceIdString( ServiceCalendar* this, int service_id );
+scGetServiceIdString( ServiceCalendar* self, int service_id );
 
 int
-scGetServiceIdInt( ServiceCalendar* this, char* service_id );
+scGetServiceIdInt( ServiceCalendar* self, char* service_id );
 
 // TODO
 //int
-//scGetOrAddServiceIdInt( ServiceCalendar* this, char* service_id );
+//scGetOrAddServiceIdInt( ServiceCalendar* self, char* service_id );
 
 void
-scAddPeriod( ServiceCalendar* this, ServicePeriod* period );
+scAddPeriod( ServiceCalendar* self, ServicePeriod* period );
 
 ServicePeriod*
-scPeriodOfOrAfter( ServiceCalendar* this, long time );
+scPeriodOfOrAfter( ServiceCalendar* self, long time );
 
 ServicePeriod*
-scPeriodOfOrBefore( ServiceCalendar* this, long time );
+scPeriodOfOrBefore( ServiceCalendar* self, long time );
 
 ServicePeriod*
-scHead( ServiceCalendar* this );
+scHead( ServiceCalendar* self );
 
 void
-scDestroy( ServiceCalendar* this );
+scDestroy( ServiceCalendar* self );
 
 ServicePeriod*
 spNew( long begin_time, long end_time, int n_service_ids, ServiceId* service_ids );
 
 void
-spDestroyPeriod( ServicePeriod* this );
+spDestroyPeriod( ServicePeriod* self );
 
 int
-spPeriodHasServiceId( ServicePeriod* this, ServiceId service_id);
+spPeriodHasServiceId( ServicePeriod* self, ServiceId service_id);
 
 ServicePeriod*
-spRewind( ServicePeriod* this );
+spRewind( ServicePeriod* self );
 
 ServicePeriod*
-spFastForward( ServicePeriod* this );
+spFastForward( ServicePeriod* self );
 
 void
-spPrint( ServicePeriod* this ) ;
+spPrint( ServicePeriod* self ) ;
 
 void
-spPrintPeriod( ServicePeriod* this ) ;
+spPrintPeriod( ServicePeriod* self ) ;
 
 inline long
-spNormalizeTime( ServicePeriod* this, int timezone_offset, long time ) ;
+spNormalizeTime( ServicePeriod* self, int timezone_offset, long time ) ;
 
 struct Timezone {
     TimezonePeriod* head;

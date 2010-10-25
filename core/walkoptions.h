@@ -22,42 +22,42 @@ WalkOptions*
 woNew(void);
 
 void
-woDestroy( WalkOptions* this );
+woDestroy( WalkOptions* self );
 
 int
-woGetTransferPenalty( WalkOptions* this );
+woGetTransferPenalty( WalkOptions* self );
 
 void
-woSetTransferPenalty( WalkOptions* this, int transfer_penalty );
+woSetTransferPenalty( WalkOptions* self, int transfer_penalty );
 
 float
-woGetWalkingSpeed( WalkOptions* this );
+woGetWalkingSpeed( WalkOptions* self );
 
 void
-woSetWalkingSpeed( WalkOptions* this, float walking_speed );
+woSetWalkingSpeed( WalkOptions* self, float walking_speed );
 
 float
-woGetWalkingReluctance( WalkOptions* this );
+woGetWalkingReluctance( WalkOptions* self );
 
 void
-woSetWalkingReluctance( WalkOptions* this, float walking_reluctance );
+woSetWalkingReluctance( WalkOptions* self, float walking_reluctance );
 
 int
-woGetMaxWalk( WalkOptions* this );
+woGetMaxWalk( WalkOptions* self );
 
 void
-woSetMaxWalk( WalkOptions* this, int max_walk );
+woSetMaxWalk( WalkOptions* self, int max_walk );
 
 float
-woGetWalkingOverage( WalkOptions* this );
+woGetWalkingOverage( WalkOptions* self );
 
 void
-woSetWalkingOverage( WalkOptions* this, float walking_overage );
+woSetWalkingOverage( WalkOptions* self, float walking_overage );
 
 int
-woGetTurnPenalty( WalkOptions* this );
+woGetTurnPenalty( WalkOptions* self );
 
 void
-woSetTurnPenalty( WalkOptions* this, int turn_penalty );
+woSetTurnPenalty( WalkOptions* self, int turn_penalty );
 
 #endif

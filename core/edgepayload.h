@@ -14,21 +14,21 @@ EdgePayload*
 epNew( edgepayload_t type, void* payload );
 
 void
-epDestroy( EdgePayload* this );
+epDestroy( EdgePayload* self );
 
 edgepayload_t
-epGetType( EdgePayload* this );
+epGetType( EdgePayload* self );
 
 long
-epGetExternalId( EdgePayload* this );
+epGetExternalId( EdgePayload* self );
 
 void
-epSetExternalId( EdgePayload *this, long external_id );
+epSetExternalId( EdgePayload *self, long external_id );
 
 State*
-epWalk( EdgePayload* this, State* param, WalkOptions* options );
+epWalk( EdgePayload* self, State* param, WalkOptions* options );
 
 State*
-epWalkBack( EdgePayload* this, State* param, WalkOptions* options );
+epWalkBack( EdgePayload* self, State* param, WalkOptions* options );
 
 #endif

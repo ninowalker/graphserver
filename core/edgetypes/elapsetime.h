@@ -25,6 +25,6 @@ inline State*
 elapseTimeWalkBack(EdgePayload* superthis, State* param, WalkOptions* options);
 
 long
-elapseTimeGetSeconds(ElapseTime* this);
+elapseTimeGetSeconds(ElapseTime* self);
 
 #endif

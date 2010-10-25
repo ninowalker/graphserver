@@ -24,7 +24,7 @@ inline State*
 waitWalkBack(EdgePayload* superthis, State* param, WalkOptions* options);
 
 long
-waitGetEnd(Wait* this);
+waitGetEnd(Wait* self);
 
 Timezone*
-waitGetTimezone(Wait* this);
+waitGetTimezone(Wait* self);

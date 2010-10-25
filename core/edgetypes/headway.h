@@ -27,36 +27,36 @@ void
 headwayDestroy(Headway* tokill);
 
 inline State*
-headwayWalk(EdgePayload* this, State* param, WalkOptions* options);
+headwayWalk(EdgePayload* self, State* param, WalkOptions* options);
 
 inline State*
-headwayWalkBack(EdgePayload* this, State* param, WalkOptions* options);
+headwayWalkBack(EdgePayload* self, State* param, WalkOptions* options);
 
 int
-headwayBeginTime(Headway* this);
+headwayBeginTime(Headway* self);
 
 int
-headwayEndTime(Headway* this);
+headwayEndTime(Headway* self);
 
 int
-headwayWaitPeriod(Headway* this);
+headwayWaitPeriod(Headway* self);
 
 int
-headwayTransit(Headway* this);
+headwayTransit(Headway* self);
 
 char*
-headwayTripId(Headway* this);
+headwayTripId(Headway* self);
 
 ServiceCalendar*
-headwayCalendar(Headway* this);
+headwayCalendar(Headway* self);
 
 Timezone*
-headwayTimezone(Headway* this);
+headwayTimezone(Headway* self);
 
 int
-headwayAgency(Headway* this);
+headwayAgency(Headway* self);
 
 ServiceId
-headwayServiceId(Headway* this);
+headwayServiceId(Headway* self);
 
 #endif

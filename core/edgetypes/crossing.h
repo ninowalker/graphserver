@@ -18,22 +18,22 @@ Crossing*
 crNew(void);
 
 void
-crDestroy(Crossing* this);
+crDestroy(Crossing* self);
 
 void
-crAddCrossingTime(Crossing* this, char* trip_id, int crossing_time);
+crAddCrossingTime(Crossing* self, char* trip_id, int crossing_time);
 
 int
-crGetCrossingTime(Crossing* this, char* trip_id);
+crGetCrossingTime(Crossing* self, char* trip_id);
 
 char*
-crGetCrossingTimeTripIdByIndex(Crossing* this, int i);
+crGetCrossingTimeTripIdByIndex(Crossing* self, int i);
 
 int
-crGetCrossingTimeByIndex(Crossing* this, int i);
+crGetCrossingTimeByIndex(Crossing* self, int i);
 
 int
-crGetSize(Crossing* this);
+crGetSize(Crossing* self);
 
 inline State*
 crWalk( EdgePayload* superthis, State* state, WalkOptions* options );

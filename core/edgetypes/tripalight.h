@@ -26,51 +26,51 @@ TripAlight*
 alNew( ServiceId service_id, ServiceCalendar* calendar, Timezone* timezone, int agency );
 
 void
-alDestroy(TripAlight* this);
+alDestroy(TripAlight* self);
 
 ServiceCalendar*
-alGetCalendar( TripAlight* this );
+alGetCalendar( TripAlight* self );
 
 Timezone*
-alGetTimezone( TripAlight* this );
+alGetTimezone( TripAlight* self );
 
 int
-alGetAgency( TripAlight* this );
+alGetAgency( TripAlight* self );
 
 ServiceId
-alGetServiceId( TripAlight* this );
+alGetServiceId( TripAlight* self );
 
 int
-alGetNumAlightings(TripAlight* this);
+alGetNumAlightings(TripAlight* self);
 
 void
-alAddAlighting(TripAlight* this, char* trip_id, int arrival, int stop_sequence);
+alAddAlighting(TripAlight* self, char* trip_id, int arrival, int stop_sequence);
 
 char*
-alGetAlightingTripId(TripAlight* this, int i);
+alGetAlightingTripId(TripAlight* self, int i);
 
 int
-alGetAlightingArrival(TripAlight* this, int i);
+alGetAlightingArrival(TripAlight* self, int i);
 
 int
-alGetAlightingStopSequence(TripAlight* this, int i);
+alGetAlightingStopSequence(TripAlight* self, int i);
 
 int
-alSearchAlightingsList(TripAlight* this, int time);
+alSearchAlightingsList(TripAlight* self, int time);
 
 int
-alGetLastAlightingIndex(TripAlight* this, int time);
+alGetLastAlightingIndex(TripAlight* self, int time);
 
 int
-alGetOverage(TripAlight* this);
+alGetOverage(TripAlight* self);
 
 int
-alGetAlightingIndexByTripId(TripAlight* this, char* trip_id);
+alGetAlightingIndexByTripId(TripAlight* self, char* trip_id);
 
 inline State*
-alWalk(EdgePayload* this, State* state, WalkOptions* options);
+alWalk(EdgePayload* self, State* state, WalkOptions* options);
 
 inline State*
-alWalkBack(EdgePayload* this, State* state, WalkOptions* options);
+alWalkBack(EdgePayload* self, State* state, WalkOptions* options);
 
 #endif

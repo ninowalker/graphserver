@@ -37,29 +37,29 @@ inline State*
 streetWalkBack(EdgePayload* superthis, State* state, WalkOptions* options);
 
 char*
-streetGetName(Street* this);
+streetGetName(Street* self);
 
 double
-streetGetLength(Street* this);
+streetGetLength(Street* self);
 
 float
-streetGetRise(Street* this);
+streetGetRise(Street* self);
 
 float
-streetGetFall(Street* this);
+streetGetFall(Street* self);
 
 void
-streetSetRise(Street* this, float rise) ;
+streetSetRise(Street* self, float rise) ;
 
 void
-streetSetFall(Street* this, float fall) ;
+streetSetFall(Street* self, float fall) ;
 long
-streetGetWay(Street* this);
+streetGetWay(Street* self);
 
 void
-streetSetWay(Street* this, long way);
+streetSetWay(Street* self, long way);
 
 bool
-streetGetReverseOfSource(Street* this) ;
+streetGetReverseOfSource(Street* self) ;
 
 #endif

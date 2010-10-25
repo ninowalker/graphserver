@@ -27,10 +27,10 @@ Combination*
 comboNew(int cap) ;
 
 void
-comboAdd(Combination *this, EdgePayload *ep) ;
+comboAdd(Combination *self, EdgePayload *ep) ;
 
 void
-comboDestroy(Combination* this) ;
+comboDestroy(Combination* self) ;
 
 inline State*
 comboWalk(EdgePayload* superthis, State* param, WalkOptions* options) ;
@@ -39,9 +39,9 @@ inline State*
 comboWalkBack(EdgePayload* superthis, State* param, WalkOptions* options) ;
 
 EdgePayload*
-comboGet(Combination *this, int i) ;
+comboGet(Combination *self, int i) ;
 
 int
-comboN(Combination *this) ;
+comboN(Combination *self) ;
 
 #endif

@@ -24,31 +24,31 @@ HeadwayAlight*
 haNew(  ServiceId service_id, ServiceCalendar* calendar, Timezone* timezone, int agency, char* trip_id, int start_time, int end_time, int headway_secs );
 
 void
-haDestroy(HeadwayAlight* this);
+haDestroy(HeadwayAlight* self);
 
 ServiceCalendar*
-haGetCalendar( HeadwayAlight* this );
+haGetCalendar( HeadwayAlight* self );
 
 Timezone*
-haGetTimezone( HeadwayAlight* this );
+haGetTimezone( HeadwayAlight* self );
 
 int
-haGetAgency( HeadwayAlight* this );
+haGetAgency( HeadwayAlight* self );
 
 ServiceId
-haGetServiceId( HeadwayAlight* this );
+haGetServiceId( HeadwayAlight* self );
 
 char*
-haGetTripId( HeadwayAlight* this );
+haGetTripId( HeadwayAlight* self );
 
 int
-haGetStartTime( HeadwayAlight* this );
+haGetStartTime( HeadwayAlight* self );
 
 int
-haGetEndTime( HeadwayAlight* this );
+haGetEndTime( HeadwayAlight* self );
 
 int
-haGetHeadwaySecs( HeadwayAlight* this );
+haGetHeadwaySecs( HeadwayAlight* self );
 
 inline State*
 haWalk( EdgePayload* superthis, State* state, WalkOptions* options );
